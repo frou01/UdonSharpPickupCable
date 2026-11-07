@@ -8,7 +8,7 @@ namespace frou01.UdonSharpPickupCable
     public
         class SocketCatchCollider : LUP_RC_CatcherCollider
     {
-        [SerializeField] AbstractWire[] wires;
+        [SerializeField] Cable[] wires;
         [SerializeField] int[] terminalOnWire;
         public override bool validationPickup(LUPickUpRC_RootChangeable pickup)
         {
@@ -27,10 +27,10 @@ namespace frou01.UdonSharpPickupCable
             if (plug)
             {
                 int wireIdx = 0;
-                foreach (AbstractWire wire in wires)
+                foreach (Cable wire in wires)
                 {
                     int plugWireIdx = 0;
-                    foreach (AbstractWire plugWire in plug.GetWires())
+                    foreach (Cable plugWire in plug.GetWires())
                     {
                         wire.AddNewWireConnection(plugWire, terminalOnWire[wireIdx], plug.GetTerminals()[plugWireIdx]);
                         plugWireIdx++;
@@ -47,7 +47,7 @@ namespace frou01.UdonSharpPickupCable
             if (plug)
             {
                 int wireIdx = 0;
-                foreach (AbstractWire wire in wires)
+                foreach (Cable wire in wires)
                 {
                     wire.RemoveWireConnection(terminalOnWire[wireIdx]);
                     wireIdx++;

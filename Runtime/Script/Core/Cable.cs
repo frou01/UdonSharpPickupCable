@@ -10,22 +10,18 @@ namespace frou01.UdonSharpPickupCable
 #if !COMPILER_UDONSHARP && UNITY_EDITOR
        abstract
 #endif
-        class AbstractWire : UdonSharpBehaviour
+        class Cable : UdonSharpBehaviour
     {
         /// <summary>
         /// 接続されたワイヤ。indexが端子に対応する。
         /// </summary>
-        [SerializeField] protected AbstractWire[] DirectConnectedWireArray;
+        [SerializeField] protected Cable[] DirectConnectedWireArray;
 
         /// <summary>
         /// 自身の端子ごとに、相手側の端子を保持する。
         /// </summary>
         [SerializeField] protected int[] TerminalOfConnectedWires;
 
-        /// <summary>
-        /// 直接続している機器
-        /// </summary>
-        [SerializeField] protected AbstractConnectableMachine[] ConnectedMachine;
         /// <summary>
         /// 直接続している機器上の端子インデックス
         /// </summary>
@@ -34,7 +30,7 @@ namespace frou01.UdonSharpPickupCable
         private void Start()
         {
             int idx = 0;
-            foreach(AbstractWire connectedWire in DirectConnectedWireArray)
+            foreach(Cable connectedWire in DirectConnectedWireArray)
             {
                 if(connectedWire != null) AddNewWireConnection(connectedWire, idx, TerminalOfConnectedWires[idx]);
                 idx++;
@@ -44,13 +40,13 @@ namespace frou01.UdonSharpPickupCable
         ///<summary>接続するためのメソッド</summary>
         ///<param name="newWire">新規に接続される線</param>
         ///<param name="terminalIndex">端子番号</param>
-        public void AddNewWireConnection(AbstractWire newWire, int myTerminalIndex, int theyTerminalIndex)
+        public void AddNewWireConnection(Cable newWire, int myTerminalIndex, int theyTerminalIndex)
         {
             SetNewWireConnection(newWire,myTerminalIndex, theyTerminalIndex);
             newWire.SetNewWireConnection(this, theyTerminalIndex, myTerminalIndex);
             UpdateAllConnectedWirePointer();
         }
-        private void SetNewWireConnection(AbstractWire newWire, int myTerminalIndex, int theyTerminalIndex)
+        private void SetNewWireConnection(Cable newWire, int myTerminalIndex, int theyTerminalIndex)
         {
             AddingNewWire(newWire, myTerminalIndex);
 
@@ -71,7 +67,6 @@ namespace frou01.UdonSharpPickupCable
         ///<summary>接続を切る為のメソッド</summary>
         ///<param name="myTerminalIndex">自分側の端子番号</param>
         ///<param name="theyTerminalIndex">相手側の端子番号</param>
-        ///<returns>接続の切断に成功したか</returns>
         private void RemoveWireConnection(int myTerminalIndex, int theyTerminalIndex)
         {
             RemovingWireConnection(myTerminalIndex, theyTerminalIndex);
@@ -80,17 +75,18 @@ namespace frou01.UdonSharpPickupCable
             UpdateAllConnectedWirePointer();
         }
 
-        public void UpdatePointer(System.Array Pointer)
+
+        /// <summary>
+        /// 機器のポインタ置き換えを行う
+        /// </summary>
+        ///<param name="Pointer">ポインタ</param>
+        private void UpdatePointer(System.Array Pointer)
         {
-            int idx = 0;
-            foreach (AbstractConnectableMachine machine in ConnectedMachine)
-            {
-                machine.SetPointer(MachineTerminalIndex[idx], Pointer);
-                idx++;
-            }
         }
 
-
+        /// <summary>
+        /// 接続されている全てのワイヤを辿り、接続されている機器のポインタを自身の物に置き換える
+        /// </summary>
         public void UpdateAllConnectedWirePointer()
         {
             DataList collected = new DataList();
@@ -103,13 +99,13 @@ namespace frou01.UdonSharpPickupCable
                 queue.TryGetValue(0, TokenType.Reference, out dequeuedWire);
                 queue.RemoveAt(0);
                 collected.Add(dequeuedWire);
-                ((AbstractWire)dequeuedWire.Reference).AddDirectConnectedWires(in collected, in queue);
+                ((Cable)dequeuedWire.Reference).AddDirectConnectedWires(in collected, in queue);
             }
 
 
             foreach (DataToken val in collected.ToArray())
             {
-                AbstractWire val_wire = ((AbstractWire)val.Reference);
+                Cable val_wire = ((Cable)val.Reference);
                 Debug.Log(val_wire.name,this);
 
                 val_wire.UpdatePointer(this.GetMyPointer());
@@ -117,14 +113,14 @@ namespace frou01.UdonSharpPickupCable
         }
 
         ///<summary>
-        /// 自身に直接接続されている線の中から、collected 及び queue に含まれない物を抽出して、queueに追加
+        /// 探索処理。自身に直接接続されている線の中から、collected 及び queue に含まれない物を抽出して、queueに追加
         ///</summary>
         ///<param name="collected">既に探索済みのWireのリスト</param>
         ///<param name="queue">次に探索するWireのリスト</param>
-        public void AddDirectConnectedWires(in DataList collected, in DataList queue)
+        private void AddDirectConnectedWires(in DataList collected, in DataList queue)
         {
             DataList newConnectedWireList = new DataList();
-            foreach (AbstractWire ConnectedWire in DirectConnectedWireArray)
+            foreach (Cable ConnectedWire in DirectConnectedWireArray)
             {
                 if (ConnectedWire)
                 {
@@ -140,22 +136,22 @@ namespace frou01.UdonSharpPickupCable
         }
 
 #if !COMPILER_UDONSHARP && UNITY_EDITOR
-        ///<summary>接続可否を判断するメソッド</summary>
+        ///<summary>接続前処理を行うためのメソッド</summary>
         ///<param name="newWire">新規に接続される線</param>
         ///<param name="terminalIndex">端子番号</param>
-        protected abstract void AddingNewWire(AbstractWire newWire, int terminalIndex);
+        protected abstract void AddingNewWire(Cable newWire, int terminalIndex);
 
-        ///<summary>接続を切って良いか判定する、もしくは付随処理を行うメソッド</summary>
-        ///<param name="terminalIndex">端子番号</param>
-        ///<returns>接続の切断に成功したか</returns>
+        ///<summary>切断前処理を行うためのメソッド</summary>
+        ///<param name="terminalIndex">自分側の端子番号</param>
+        ///<param name="theyTerminalIndex">相手側の端子番号</param>
         protected abstract void RemovingWireConnection(int terminalIndex,int theyTerminalIndex);
 
-        protected abstract void GivePointerToMachine();
+        protected abstract void GivePointerToMachine();//TODO 機器ポインタ置き換え処理について、Machineの関数を呼び出すやり方に変更する
 
         protected abstract void applyPointerToMachine();
         public abstract System.Array GetMyPointer();
 #else
-        protected virtual void AddingNewWire(AbstractWire newWire, int terminalIndex){
+        protected virtual void AddingNewWire(Cable newWire, int terminalIndex){
         }
         protected virtual void RemovingWireConnection(int terminalIndex,int theyTerminalIndex){
         }

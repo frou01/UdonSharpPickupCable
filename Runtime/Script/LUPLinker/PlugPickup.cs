@@ -7,9 +7,9 @@ namespace frou01.UdonSharpPickupCable
 {
     public class PlugPickup : LUPickUpRC_RootChangeable
     {
-        [SerializeField] AbstractWire[] wires;
+        [SerializeField] Cable[] wires;
 
-        public AbstractWire[] GetWires()
+        public Cable[] GetWires()
         {
             return wires;
         }
