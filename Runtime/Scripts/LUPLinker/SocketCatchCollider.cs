@@ -32,13 +32,12 @@ namespace frou01.UdonSharpPickupCable
                     int plugWireIdx = 0;
                     foreach (Cable plugWire in plug.GetWires())
                     {
-                        wire.AddNewWireConnection(plugWire, terminalOnWire[wireIdx], plug.GetTerminals()[plugWireIdx]);
+                        //wire.AddNewWireConnection(plugWire, terminalOnWire[wireIdx], plug.GetTerminals()[plugWireIdx]);
                         plugWireIdx++;
                     }
                     wireIdx++;
                 }
             }
-            //TODO: 同期入れ違いにより複数本入ってしまった場合は、IDの若い方を優先して解決する。
         }
         public override void PickupExit(LUPickUpRC_RootChangeable pickup)
         {
@@ -49,16 +48,10 @@ namespace frou01.UdonSharpPickupCable
                 int wireIdx = 0;
                 foreach (Cable wire in wires)
                 {
-                    wire.RemoveWireConnection(terminalOnWire[wireIdx]);
+                    //wire.RemoveWireConnection(terminalOnWire[wireIdx]);
                     wireIdx++;
                 }
             }
-            //TODO: plugのワイヤと、自身のワイヤを切断する。
         }
-#if !COMPILER_UDONSHARP && UNITY_EDITOR
-
-#else
-
-#endif
     }
 }

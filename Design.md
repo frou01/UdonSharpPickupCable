@@ -42,8 +42,7 @@ Udon では、他のクラスのメンバを辿ってアクセスするとオー
 
 | フィールド | 内容 |
 |---|---|
-| `wireCount` | Wire の数 |
-| Wire ごとの疑似ポインタ | 各 Wire が自分専用の配列を1つ持つ（`object[]` に `float[]` などを入れる） |
+| Wire ごとの疑似ポインタ | 各 Wire が自分専用の配列を1つ持つ（`object[]` に `float[]` などを入れる）。Wire の数はこの長さで表す |
 | Wire ごとのデフォルト値 | Net が変わったときに疑似ポインタをこの値で上書きする。電気なら基本 0 |
 | `terminals[]` | この Cable の Terminal |
 
@@ -66,7 +65,6 @@ Udon では、他のクラスのメンバを辿ってアクセスするとオー
 classDiagram
   direction LR
   class Cable {
-    +int wireCount
     +Terminal[] terminals
     #object[] pseudoPointers
     #object[] defaultValues
@@ -78,11 +76,11 @@ classDiagram
   class Terminal {
     +Cable cable
     +int[] pinToWire
-    +int[] mateTable
+    +int[] matePins
     +Terminal partner
-    -int[] partnerPin
+    -int[] partnerPins
     +Connect(Terminal other)
-    +Disconnect()
+    +_Disconnect()
   }
   class MachineAdapter
   class Machine
@@ -104,16 +102,16 @@ classDiagram
 |---|---|
 | `cable` | 親の Cable |
 | `pinToWire[]` | Pin → Wire。その Pin がなければ -1。1つの Wire を複数の Pin に割り当ててよい |
-| `mateTable[]` | 自分の Pin p が相手の Pin `mateTable[p]` とつながる。空なら同じ番号どうし |
+| `matePins[]` | 自分の Pin p が相手の Pin `matePins[p]` とつながる。空なら同じ番号どうし |
 | `partner` | 相手の Terminal（1つ）。必ず両側で対称に持つ |
-| `partnerPin[]` | 接続時に計算するキャッシュ。自分の Pin → 相手の Pin |
+| `partnerPins[]` | 接続時に計算するキャッシュ。自分の Pin → 相手の Pin |
 
 - Pin の割り当ては、ソケットを Prefab にするかコピーで揃える。
-- プラグ / ソケット（`PlugPickup` / `SocketCatchCollider`）は Terminal を持ち、外部の同期から来た接続状態で Terminal の Connect / Disconnect を呼ぶ。Wire のことは知らなくてよい。
+- プラグ / ソケット（`PlugPickup` / `SocketCatchCollider`）は Terminal を持ち、外部の同期から来た接続状態で Terminal の Connect / _Disconnect を呼ぶ。Wire のことは知らなくてよい。
 
 ### スイッチ・リレー
 
-Cable の中の Wire どうしをつないだり切ったりするときは、**同じ Cable の中の Terminal 2つ**を Connect / Disconnect する。
+Cable の中の Wire どうしをつないだり切ったりするときは、**同じ Cable の中の Terminal 2つ**を Connect / _Disconnect する。
 
 - 例: Wire 0 と Wire 1 の間のスイッチ。Pin を1つずつ持つ Terminal a と b を置く。
 
@@ -122,7 +120,7 @@ Cable の中の Wire どうしをつないだり切ったりするときは、**
   b.pinToWire = new int[] { 1 }; // b の Pin 0 → Wire 1
   ```
 
-  スイッチを入れたら `a.Connect(b)`。a の Pin 0 と b の Pin 0 が向かい合い、Wire 0 と Wire 1 が同じ Net になる。切ったら `a.Disconnect()`
+  スイッチを入れたら `a.Connect(b)`。a の Pin 0 と b の Pin 0 が向かい合い、Wire 0 と Wire 1 が同じ Net になる。切ったら `a._Disconnect()`
 - 多極スイッチは Terminal の Pin を増やす。切り替えスイッチは、共通側の Terminal 1つと接点側の Terminal 2つをつなぎ替える
 - 探索や配り直しは外の接続と同じ流れに乗るので、専用のコードはいらない
 - Connect は「相手が同じ Cable」を拒否しないこと
@@ -131,16 +129,16 @@ Cable の中の Wire どうしをつないだり切ったりするときは、**
 
 ### Connect(a, b)
 
-1. a か b がすでにつながっていれば、先に Disconnect する
+1. a か b がすでにつながっていれば、先に _Disconnect する
 2. `a.partner = b`、`b.partner = a`
-3. 両側の `partnerPin` を `mateTable` から作る
-4. 対称になっているか確かめる: `a.partnerPin[p] == q` なら `b.partnerPin[q] == p`。崩れていれば `LogWarning`
+3. 両側の `partnerPins` を `matePins` から作る
+4. 対称になっているか確かめる: `a.partnerPins[p] == q` なら `b.partnerPins[q] == p`。崩れていれば `LogWarning`
 5. 出発点を集めて配り直す（下記）。出発点は、両側の Terminal の各 Pin が指す Wire（-1 は除く）
 
-### Disconnect(a)
+### _Disconnect(a)
 
 1. 出発点を先に集める（両側の Terminal の各 Pin が指す Wire）
-2. 両側の `partner` と `partnerPin` を消す
+2. 両側の `partner` と `partnerPins` を消す
 3. 出発点から配り直す
 
 ### アクティビティ図
@@ -148,18 +146,18 @@ Cable の中の Wire どうしをつないだり切ったりするときは、**
 ```mermaid
 flowchart TD
   c0(["a.Connect(b)"]) --> c1{"a か b がつながっている?"}
-  c1 -- はい --> c2["先に Disconnect"] --> c3
+  c1 -- はい --> c2["先に _Disconnect"] --> c3
   c1 -- いいえ --> c3["partner を両側に設定"]
-  c3 --> c4["partnerPin を mateTable から作る"]
-  c4 --> c5{"partnerPin が対称?"}
+  c3 --> c4["partnerPins を matePins から作る"]
+  c4 --> c5{"partnerPins が対称?"}
   c5 -- いいえ --> c6["LogWarning"] --> c7
   c5 -- はい --> c7[["配り直し"]]
-  d0(["a.Disconnect()"]) --> d1["出発点を集める（切る前）"]
-  d1 --> d2["両側の partner と partnerPin を消す"]
+  d0(["a._Disconnect()"]) --> d1["出発点を集める（切る前）"]
+  d1 --> d2["両側の partner と partnerPins を消す"]
   d2 --> d3[["配り直し"]]
 ```
 
-配り直し（Connect・Disconnect・スイッチ・`RequestRefresh` で共通）:
+配り直し（Connect・_Disconnect・スイッチ・`RequestRefresh` で共通）:
 
 ```mermaid
 flowchart TD
@@ -189,7 +187,7 @@ flowchart TD
 foreach Terminal T in C.terminals
   U = T.partner; if U == null → 飛ばす
   foreach Pin p で T.pinToWire[p] == w
-    q  = T.partnerPin[p]
+    q  = T.partnerPins[p]
     w2 = U.pinToWire[q]; if w2 < 0 → 飛ばす
     (U.cable, w2) が隣
 ```
@@ -204,7 +202,7 @@ foreach Terminal T in C.terminals
 
 各 Wire が自分の疑似ポインタを持つので、Net の疑似ポインタを「Net の中の誰かのもの」にすれば、別の Net と重ならない。
 
-Net が変わったら（Connect・Disconnect・スイッチ・`RequestRefresh` のどれでも同じ手順）:
+Net が変わったら（Connect・_Disconnect・スイッチ・`RequestRefresh` のどれでも同じ手順）:
 
 1. 探索で、変わった Net を見つける
 2. Net に疑似ポインタを1つ割り当てる（Net の中の誰かのもの）。要素を**デフォルト値で上書き**する
@@ -223,6 +221,13 @@ Net が変わったら（Connect・Disconnect・スイッチ・`RequestRefresh` 
 - `DataDictionary` のキーに UdonSharpBehaviour の参照を使ったとき、参照の同一性で比べられるかを最初に確かめる。
 - 抽象メソッドは今のコードと同じく、`#if !COMPILER_UDONSHARP && UNITY_EDITOR` で abstract / virtual を切り替える。
 
+## 名前（NamingConventionProposal.md との対応）
+
+- asmdef は `frou01.UdonSharpPickupCable.Runtime`、名前空間は `frou01.UdonSharpPickupCable`。スクリプトは `Runtime/Scripts/` に置く。
+- 配列のフィールドは複数形にする（`partnerPins`、`matePins`、`terminals`）。`pinToWire` は対応表なので `〜To〜` の形のまま例外とする。
+- 引数のない public メソッドは `SendCustomNetworkEvent` でリモートから呼べてしまうので、`_` を付ける（`_Disconnect()`）。引数のある `Connect(Terminal)` はネットワークイベントで呼べないので付けない。SDK のバージョンで扱いが変わっているので、実装時に確認する。
+- テスト用の偽物は `Fake〜` にする。
+
 ## 今のコードからの変更点
 
 - 今の `AbstractWire` は「ケーブル」の意味で使われている。新しい用語では Wire は芯なので、**意味が入れ替わる**。古い名前を残さないこと。
@@ -239,5 +244,5 @@ Net が変わったら（Connect・Disconnect・スイッチ・`RequestRefresh` 
 ## まだ決めていないこと
 
 - Wire が64本を超える Cable を許すか（「見た」の記録を `DataList` にするか）
-- `partnerPin` の代わりに「自分の Wire → 相手の (Cable, Wire) の一覧」まで接続時にキャッシュするか
+- `partnerPins` の代わりに「自分の Wire → 相手の (Cable, Wire) の一覧」まで接続時にキャッシュするか
 - Net の疑似ポインタを誰のものにするか（今使っているものの持ち主が Net の中にいれば使い続ける、など）。使い続ければ、Reader の参照を差し替えずに済む

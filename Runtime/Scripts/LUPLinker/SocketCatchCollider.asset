@@ -500,7 +500,7 @@ MonoBehaviour:
       Data: 28|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: frou01.UdonSharpPickupCable.Cable[], UdonSharpPickupCable
+      Data: frou01.UdonSharpPickupCable.Cable[], frou01.UdonSharpPickupCable.Runtime
     - Name: 
       Entry: 8
       Data: 
