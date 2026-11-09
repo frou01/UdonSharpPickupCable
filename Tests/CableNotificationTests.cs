@@ -364,6 +364,156 @@ namespace frou01.UdonSharpPickupCable.Tests
             Assert.That(formerReader.receivedPointers[0], Is.Not.SameAs(writer.receivedPointers[0]));
         }
 
+        [Test]
+        public void ConnectRefreshesEachAssignedWireOnce()
+        {
+            // 同じWireを複数のPinに割り当て、-1のPinも混ぜる
+            FakeCable plug = CreateFake("Plug", WireRole.Reader, WireRole.Reader);
+            FakeCable socket = CreateFake("Socket", WireRole.Reader, WireRole.Reader);
+
+            CreateTerminal(plug, 0, 0, -1, 1).Connect(CreateTerminal(socket, 0, 0, -1, 1));
+
+            Assert.That(eventLog.FindAll(entry => entry.StartsWith("Reset")).Count, Is.EqualTo(2));
+            Assert.That(socket.receivedPointers[0], Is.SameAs(plug.receivedPointers[0]));
+            Assert.That(socket.receivedPointers[1], Is.SameAs(plug.receivedPointers[1]));
+        }
+
+        [Test]
+        public void DisconnectRefreshesEachAssignedWireOnce()
+        {
+            FakeCable plug = CreateFake("Plug", WireRole.Reader);
+            FakeCable socket = CreateFake("Socket", WireRole.Reader);
+            Terminal plugTerminal = CreateTerminal(plug, 0, 0, -1);
+            plugTerminal.Connect(CreateTerminal(socket, 0, 0, -1));
+            eventLog.Clear();
+
+            plugTerminal._Disconnect();
+
+            Assert.That(eventLog.FindAll(entry => entry == "Reset:Plug:0").Count, Is.EqualTo(1));
+            Assert.That(eventLog.FindAll(entry => entry == "Reset:Socket:0").Count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void TerminalWithOnlyEmptyPinsRefreshesNothing()
+        {
+            FakeCable plug = CreateFake("Plug", WireRole.Reader);
+            FakeCable socket = CreateFake("Socket", WireRole.Reader);
+
+            CreateTerminal(plug, -1).Connect(CreateTerminal(socket, 0));
+
+            Assert.That(eventLog, Is.Empty);
+        }
+
+        // ---- NotifyWritten ----
+
+        [Test]
+        public void NotifyWrittenReachesOnlyReadersThatWantIt()
+        {
+            FakeCable writer = CreateFake("Writer", WireRole.Writer);
+            FakeCable wantingReader = CreateFake("WantingReader", WireRole.Reader);
+            wantingReader.wantsWritten = true;
+            FakeCable otherReader = CreateFake("OtherReader", WireRole.Reader);
+            Mate(CreateTerminal(writer, 0), CreateTerminal(wantingReader, 0));
+            Mate(CreateTerminal(wantingReader, 0), CreateTerminal(otherReader, 0));
+            writer.RequestRefresh(0);
+            eventLog.Clear();
+
+            writer.WriteAndNotify(0, 200f);
+
+            Assert.That(eventLog, Is.EqualTo(new[] { "Written:WantingReader:0" }));
+            Assert.That(ReadValue(wantingReader, 0), Is.EqualTo(200f));
+        }
+
+        [Test]
+        public void NotifyWrittenPassesWireNumberOfReader()
+        {
+            FakeCable writer = CreateFake("Writer", WireRole.Writer);
+            FakeCable reader = CreateFake("Reader", WireRole.None, WireRole.Reader);
+            reader.wantsWritten = true;
+            Mate(CreateTerminal(writer, 0), CreateTerminal(reader, 1));
+            writer.RequestRefresh(0);
+            eventLog.Clear();
+
+            writer.WriteAndNotify(0, 200f);
+
+            Assert.That(eventLog, Is.EqualTo(new[] { "Written:Reader:1" }));
+        }
+
+        [Test]
+        public void NotifyWrittenDoesNotReachOtherNets()
+        {
+            FakeCable plug = CreateFake("Plug", WireRole.Writer, WireRole.Writer);
+            FakeCable socket = CreateFake("Socket", WireRole.Reader, WireRole.Reader);
+            socket.wantsWritten = true;
+            Mate(CreateTerminal(plug, 0, 1), CreateTerminal(socket, 0, 1));
+            plug.RequestRefresh(0);
+            plug.RequestRefresh(1);
+            eventLog.Clear();
+
+            plug.WriteAndNotify(1, 200f);
+
+            Assert.That(eventLog, Is.EqualTo(new[] { "Written:Socket:1" }));
+        }
+
+        [Test]
+        public void NotifyWrittenBeforeFirstRefreshDoesNothing()
+        {
+            FakeCable writer = CreateFake("Writer", WireRole.Writer);
+
+            writer.NotifyOnly(0);
+
+            Assert.That(eventLog, Is.Empty);
+        }
+
+        [Test]
+        public void NotifyWrittenForWireWithoutListenersDoesNothing()
+        {
+            FakeCable writer = CreateFake("Writer", WireRole.Writer);
+            writer.RequestRefresh(0);
+            eventLog.Clear();
+
+            writer.NotifyOnly(5);
+
+            Assert.That(eventLog, Is.Empty);
+        }
+
+        [Test]
+        public void NotifyWrittenInsidePostUsesNewListeners()
+        {
+            FakeCable writer = CreateFake("Writer", WireRole.Writer);
+            writer.shouldNotifyOnPost = true;
+            FakeCable reader = CreateFake("Reader", WireRole.Reader);
+            reader.wantsWritten = true;
+
+            CreateTerminal(writer, 0).Connect(CreateTerminal(reader, 0));
+
+            Assert.That(eventLog.FindAll(entry => entry == "Written:Reader:0").Count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ListenersFollowConnectAndDisconnect()
+        {
+            FakeCable writer = CreateFake("Writer", WireRole.Writer);
+            FakeCable reader = CreateFake("Reader", WireRole.Reader);
+            reader.wantsWritten = true;
+            Terminal writerTerminal = CreateTerminal(writer, 0);
+            writer.RequestRefresh(0);
+            eventLog.Clear();
+
+            writer.NotifyOnly(0);
+            Assert.That(eventLog, Is.Empty, "before connect");
+
+            writerTerminal.Connect(CreateTerminal(reader, 0));
+            eventLog.Clear();
+            writer.NotifyOnly(0);
+            Assert.That(eventLog, Is.EqualTo(new[] { "Written:Reader:0" }), "after connect");
+
+            writerTerminal._Disconnect();
+            eventLog.Clear();
+            writer.NotifyOnly(0);
+            Assert.That(eventLog, Is.Empty, "after disconnect");
+        }
+
         // ---- ヘルパー ----
 
         private FakeCable CreateFake(string name, params WireRole[] wireRoles)
@@ -391,13 +541,13 @@ namespace frou01.UdonSharpPickupCable.Tests
         /// <summary>
         /// cableの子にTerminalを作り、cable.terminalsの末尾に加える。
         /// </summary>
-        private static Terminal CreateTerminal(Cable cable, params int[] pinToWire)
+        private static Terminal CreateTerminal(Cable cable, params int[] pinToWireMap)
         {
             GameObject terminalObject = new GameObject("Terminal" + cable.terminals.Length);
             terminalObject.transform.SetParent(cable.transform);
             Terminal terminal = terminalObject.AddComponent<Terminal>();
             terminal.cable = cable;
-            terminal.pinToWire = pinToWire;
+            terminal.pinToWireMap = pinToWireMap;
 
             Terminal[] terminals = new Terminal[cable.terminals.Length + 1];
             cable.terminals.CopyTo(terminals, 0);
@@ -461,6 +611,24 @@ namespace frou01.UdonSharpPickupCable.Tests
         public Terminal terminalToConnectOnPost;
         public Terminal connectTargetOnPost;
 
+        public bool wantsWritten;
+
+        /// <summary>
+        /// trueなら、PostNetChangedの中で全Wire分のNotifyWrittenを呼ぶ。
+        /// </summary>
+        public bool shouldNotifyOnPost;
+
+        public void WriteAndNotify(int wire, float value)
+        {
+            ((float[])receivedPointers[wire])[0] = value;
+            NotifyWritten(wire);
+        }
+
+        public void NotifyOnly(int wire)
+        {
+            NotifyWritten(wire);
+        }
+
         public void SetWriter(int wire, bool isWriter)
         {
             wireRoles[wire] = isWriter ? WireRole.Writer : WireRole.Reader;
@@ -505,6 +673,7 @@ namespace frou01.UdonSharpPickupCable.Tests
             Record("Post", wire);
             currentPointersAtPost[wire] = currentPointers[wire];
             valuesAtPost[wire] = ((float[])currentPointers[wire])[0];
+            if (shouldNotifyOnPost) NotifyWritten(wire);
 
             if (terminalToConnectOnPost != null)
             {
@@ -512,6 +681,16 @@ namespace frou01.UdonSharpPickupCable.Tests
                 terminalToConnectOnPost = null;
                 terminal.Connect(connectTargetOnPost);
             }
+        }
+
+        public override bool WantsWrittenNotification(int wire)
+        {
+            return wantsWritten;
+        }
+
+        public override void OnWritten(int wire)
+        {
+            Record("Written", wire);
         }
 
         protected override void ResetToDefault(int wire, Array pointer)

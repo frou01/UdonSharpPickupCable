@@ -107,7 +107,7 @@ namespace frou01.UdonSharpPickupCable.Tests
             terminalObject.transform.SetParent(cable.transform);
             Terminal terminal = terminalObject.AddComponent<Terminal>();
             terminal.cable = cable;
-            terminal.pinToWire = new int[] { 0 };
+            terminal.pinToWireMap = new int[] { 0 };
 
             Terminal[] terminals = new Terminal[cable.terminals.Length + 1];
             cable.terminals.CopyTo(terminals, 0);

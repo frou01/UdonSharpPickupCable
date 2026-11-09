@@ -248,13 +248,13 @@ namespace frou01.UdonSharpPickupCable.Tests
         /// <summary>
         /// cableの子にTerminalを作り、cable.terminalsの末尾に加える。
         /// </summary>
-        private static Terminal CreateTerminal(Cable cable, params int[] pinToWire)
+        private static Terminal CreateTerminal(Cable cable, params int[] pinToWireMap)
         {
             GameObject terminalObject = new GameObject("Terminal" + cable.terminals.Length);
             terminalObject.transform.SetParent(cable.transform);
             Terminal terminal = terminalObject.AddComponent<Terminal>();
             terminal.cable = cable;
-            terminal.pinToWire = pinToWire;
+            terminal.pinToWireMap = pinToWireMap;
 
             Terminal[] terminals = new Terminal[cable.terminals.Length + 1];
             cable.terminals.CopyTo(terminals, 0);
