@@ -458,15 +458,10 @@ MonoBehaviour:
     PrefabModifications: []
     SerializationNodes: []
   _udonSharpBackingUdonBehaviour: {fileID: 152976914}
-  terminals:
-  - {fileID: 1163500647}
-  - {fileID: 903751531}
-  - {fileID: 1317655663}
-  - {fileID: 401353397}
+  terminals: []
   isWriter: 0
   defaultValue: 0
   valueToWrite: 0
-  pointer: []
 --- !u!1 &358170787
 GameObject:
   m_ObjectHideFlags: 0
@@ -1697,15 +1692,10 @@ MonoBehaviour:
     PrefabModifications: []
     SerializationNodes: []
   _udonSharpBackingUdonBehaviour: {fileID: 1285352911}
-  terminals:
-  - {fileID: 1726744552}
-  - {fileID: 104140411}
-  - {fileID: 822510217}
-  - {fileID: 1607651754}
+  terminals: []
   isWriter: 1
   defaultValue: 0
-  valueToWrite: 1
-  pointer: []
+  valueToWrite: 10
 --- !u!23 &1285352913
 MeshRenderer:
   m_ObjectHideFlags: 0
