@@ -1,6 +1,6 @@
 # UdonSharpPickupCable 設計メモ
 
-2026-11-09 時点。Terminal の接続・切断、Cable の探索・疑似ポインタの割り当て・通知、プラグ / ソケット（LUPLinker）、`terminals` の自動設定まで実装済みで、テストがある。Wire 1本のサンプル（`SimpleFloatCable`）は Udon 上でも動作を確認した。機器との仲介（MachineAdapter）はこれから。
+2026-11-09 時点。Terminal の接続・切断、Cable の探索・疑似ポインタの割り当て・通知、書き込みの通知、プラグ / ソケット（LUPLinker）、`terminals` の自動設定まで実装済みで、テストがある。Wire 1本（`SimpleFloatCable`）、多芯とクロス配線（`SimpleMultiCable`）は Udon 上でも動作を確認した。書き込みの通知は Udon 上では未確認。機器との仲介（MachineAdapter）はこれから。
 
 ## 目的
 
@@ -45,8 +45,9 @@ Udon では、他のクラスのメンバを辿ってアクセスするとオー
 | `terminals[]` | この Cable の Terminal。**ビルド時に自動で設定する**ので、インスペクタには出さない（`[HideInInspector]`、下記の「自動設定」） |
 | `sourcePointersCache[]` | Wire ごとの配送元用の配列。`CreateSourcePointers` の結果を保持する。機器がつながっていない Wire は null か範囲外 |
 | `currentPointers[]` | Wire ごとに、今その Wire の Net が使っている疑似ポインタ（Net の中の誰かの配送元用の配列）。Net に配列がなければ null |
+| `perWireListenerWireTokens` | Wire ごとに、書き込みの通知を受ける Reader の一覧（`DataList`。下記の「書き込みの通知」）。最初の配り直しまでは null |
 
-どちらも `[NonSerialized]`。`object[]` はシリアライズされないので、実行時に作る。
+どれも `[NonSerialized]`。`object[]` や `DataList` はシリアライズされないので、実行時に作る。
 
 - **配送元用の配列は、必要になったときに作る**（`_GetSourcePointers` の初回）。Start の順番に依存しない。
 - `currentPointers` は `SetCurrentPointer` が、必要な長さまで伸ばす。基底の Cable は Wire の数を知らないため。
@@ -59,18 +60,22 @@ Udon では、他のクラスのメンバを辿ってアクセスするとオー
 - `OnNetChangedWriter(wire, pointer)`: Writer への通知。参照を差し替えて、すぐ書き込む
 - `OnNetChangedReader(wire, pointer)`: Reader への通知。参照を差し替える
 - `PostNetChanged(wire)`: Writer / Reader 共通の通知。Net が確定し、全員の通知と `currentPointers` の更新が終わったあとに呼ばれる
+- `WantsWrittenNotification(wire)`: その Wire が Reader のとき、書き込みの通知を受けるかどうか。基底は false
+- `OnWritten(wire)`: Reader への通知。同じ Net の Writer が `NotifyWritten` を呼んだときに呼ばれる
 
 Cable が持つもの:
 
 - `RequestRefresh(wire)`: 書き込みをやめたときなどに呼ぶ。その Wire の Net だけ配り直す。今はテストのために、見つけた Net（下記の visited）を返す
 - `_GetSourcePointers()`: 配送元用の配列を返す。なければ作る
 - `SetCurrentPointer(wire, pointer)`: `currentPointers` を更新する
+- `NotifyWritten(wire)`: 継承先の Writer が、疑似ポインタに書き込んだあとに呼ぶ（`protected`）
+- `SetWrittenListeners(wire, listeners)`: 書き込みの通知を受ける Reader の一覧を差し替える
 
 基底の Cable は、そのままケーブルとして使える（配列を持たないので、通知は届かない）。車体内の配線も、前後のジャンパ栓などを Terminal にした基底の Cable で表す。派生クラスは次の1つ:
 
 - 機器との仲介: 機器に疑似ポインタを受け渡す。Writer / Reader は **Wire ごと**に持つ（Terminal 1 では書き込み、Terminal 2 では読み込み、もありえる）
 
-継承先の書き方の例は `Runtime/Scripts/Sample/SimpleFloatCable.cs`（Wire 1本、`float[1]`）。
+継承先の書き方の例は `Samples/Scripts/SimpleFloatCable.cs`（Wire 1本、`float[1]`）と `SimpleMultiCable.cs`（多芯）。
 
 **継承先の注意:** `IsWriter` を true にしても、その Wire の配列を作っていなければ通知は届かない。
 
@@ -96,11 +101,16 @@ classDiagram
     +Terminal[] terminals
     #object[] sourcePointersCache
     #object[] currentPointers
+    #DataList perWireListenerWireTokens
     +IsWriter(int wire) bool
     #ResetToDefault(int wire, Array pointer)
     +OnNetChangedWriter(int wire, Array pointer)
     +OnNetChangedReader(int wire, Array pointer)
     +PostNetChanged(int wire)
+    +WantsWrittenNotification(int wire) bool
+    +OnWritten(int wire)
+    #NotifyWritten(int wire)
+    +SetWrittenListeners(int wire, DataList listeners)
     #CreateSourcePointers() object[]
     +_GetSourcePointers() object[]
     +SetCurrentPointer(int wire, object pointer)
@@ -211,9 +221,10 @@ flowchart TD
     b9 -- はい --> b10["OnNetChangedWriter"] --> b2
     b9 -- いいえ --> b11["Reader の一覧に入れる"] --> b2
   end
-  b2 -- はい --> a1["Reader の一覧に OnNetChangedReader"]
+  b2 -- はい --> a1["Reader の一覧に OnNetChangedReader、通知の希望を集める"]
   a1 --> a2["visited の全員に SetCurrentPointer"]
-  a2 --> a3["Post の一覧に PostNetChanged"]
+  a2 --> a4["Post の一覧に SetWrittenListeners"]
+  a4 --> a3["Post の一覧に PostNetChanged"]
   a3 --> e0(["visited を返す"])
 ```
 
@@ -250,7 +261,7 @@ foreach Terminal T in C.terminals
 - `CableTests.cs`: 探索。Terminal の `partner` を直接書いて接続を作り、`RequestRefresh` が返す Net を、順番を問わず重複も許さずに比べる。`Connect` は中で探索を呼ぶので使わない。
   - 扱っている場合: どこともつながっていない Wire、Pin 番号による対応、ほかの Wire が混ざらないこと、相手の Pin が足りない・-1、分岐、同じ Wire を複数 Pin に割り当て、直列、辿れない Net、Cable の輪、ターミネーターで同じ Cable の2本の Wire をつなぐ、スイッチ。
 - `CableNotificationTests.cs`: 疑似ポインタの割り当てと通知。Wire ごとに役割（None / Reader / Writer）を持つ `FakeCable` で、通知の順番と受け取った配列を記録する。
-  - 扱っている場合: 配列の共有、ただの Cable を挟む、別の Net は別の配列、リセットと通知の順番と回数、書いた値とデフォルト値、配列を作り直さないこと、配列を持つメンバーがいない Net、配列を持たない Wire、`PostNetChanged`、`PostNetChanged` の中の Connect（リレー）、Connect / _Disconnect / つなぎ替え。
+  - 扱っている場合: 配列の共有、ただの Cable を挟む、別の Net は別の配列、リセットと通知の順番と回数、書いた値とデフォルト値、配列を作り直さないこと、配列を持つメンバーがいない Net、配列を持たない Wire、`PostNetChanged`、`PostNetChanged` の中の Connect（リレー）、Connect / _Disconnect / つなぎ替え、`AssignedWires`、`NotifyWritten`（希望した Reader だけに届く、Reader の Wire 番号、別の Net に届かない、最初の配り直しの前、リスナーがいない Wire、`PostNetChanged` の中、接続・切断での一覧の更新）。
 - `SimpleFloatCableTests.cs`: サンプルの動作と、`_DebugLogCurrentPointers` の出力。
 - `CableBuildProcessTests.cs`: `terminals` の自動設定。テストランナーの無題のシーンを処理し、作業中のシーンは書き換えない。
 - `Fake〜` はテストクラスのファイルの中に書く。Editor 専用の asmdef でファイル名とクラス名が一致すると、エディタスクリプト扱いになって `AddComponent` が null を返す。
@@ -264,9 +275,10 @@ Net が変わったら（Connect・_Disconnect・スイッチ・`RequestRefresh`
 1. 探索しながら、自分の配列を持つ Wire を見つけていく
 2. 最初に見つけた配列を Net の疑似ポインタにする。持ち主が1回だけ `ResetToDefault` で上書きする
 3. Writer には見つけた時点で `OnNetChangedWriter` を呼ぶ。ここですぐ書き込んでもらう。Writer は配列を持っているので、書き込みより前に必ずリセットが終わっている
-4. 探索が終わったら、Reader 全員に `OnNetChangedReader` を呼ぶ
+4. 探索が終わったら、Reader 全員に `OnNetChangedReader` を呼ぶ。同時に `WantsWrittenNotification` が true の Reader を集める
 5. visited の全員に `SetCurrentPointer` を呼ぶ（配列がなければ null）
-6. Writer と Reader 全員に `PostNetChanged` を呼ぶ
+6. Writer と Reader 全員に `SetWrittenListeners` で、集めた Reader の一覧を配る
+7. Writer と Reader 全員に `PostNetChanged` を呼ぶ
 
 - Writer がいない Net だけがデフォルト値に戻る。
 - Writer と Reader の通知を分けるのは、Reader が書き込みより先に呼ばれてデフォルト値を読むのを防ぐため。
@@ -276,6 +288,31 @@ Net が変わったら（Connect・_Disconnect・スイッチ・`RequestRefresh`
 - 同じ Net に Writer が複数いるのはエラー動作として扱い、解決は利用者に任せる（どちらが勝つかは決めない）。
 - デフォルト値を決めるのは Net の疑似ポインタの持ち主。電気なら基本 0 なので、Net の中で値が食い違う場合は気にしない。
 - 同じ Net に型の違う配列を持つ Wire が来るのは、利用者の設定ミスとして扱う。
+
+## 書き込みの通知
+
+Writer が値を書いたことを、Reader が毎回読み出さずに知るための仕組み。希望した Reader の Wire にだけ届く。毎フレーム変わる値は通知を使わず、Reader が Update で読み出す。
+
+```csharp
+// Writer 側（継承先）
+pointer[0] = value;
+NotifyWritten(wire);
+
+// Reader 側（継承先）
+public override bool WantsWrittenNotification(int wire) { return true; }
+public override void OnWritten(int wire) { /* 疑似ポインタを読む */ }
+```
+
+- 配列に書いただけでは通知しない。Writer が `NotifyWritten` を呼んだときだけ届く。
+- 通知の相手は配り直しのときに決まる。`WantsWrittenNotification` もそのときに読むので、あとから希望を変えたら `RequestRefresh` が要る。
+- 一覧は Net に1つで、配列を持つ Wire 全員が同じ `DataList` を持つ。要素は探索と同じ点の `DataList`（Cable と Wire 番号）。
+- Reader だけが一覧に入る。`NotifyWritten` を呼んだ Writer 自身にも、ほかの Writer にも届かない。
+- 呼ぶタイミング:
+  - `PostNetChanged` の中: `PostNetChanged` より先に一覧を配っているので、新しい一覧の相手に届く。
+  - `OnNetChangedWriter` の中: 一覧はまだ前の配り直しのもの。最初の配り直しなら一覧がなく、何も起きない。Reader は `OnNetChangedReader` や `PostNetChanged` で値を読めるので、ここで呼ぶ必要はない。
+  - 最初の配り直しの前: 何も起きない。
+- `OnWritten` の中で別の Wire に書いて `NotifyWritten` を呼んでもよい（`[RecursiveMethod]`）。通知がループすると止まらなくなるので、解決は利用者に任せる。
+- `OnWritten` の中で接続を変えても、走っているループは古い一覧のまま最後まで回る。
 
 ## Udon で気をつけること
 
@@ -287,11 +324,15 @@ Net が変わったら（Connect・_Disconnect・スイッチ・`RequestRefresh`
 - 同じクラスの別のインスタンスの private メソッドも呼べる（`SetCurrentPointer` で確認済み）。
 - Start の順番は決まっていない。ほかの Cable の配列を使うときは、作られている前提にしない。
 - 継承先で実装するものは abstract にせず virtual にする。基底の Cable をそのまま使えるようにするためで、U# の abstract を切り替える `#if` も要らない。
-- テストはエディタ上の C# として動く。Udon 上の動作は実際に動かして確かめる。`protected virtual` の別インスタンス呼び出しと `object[]` から `Array` へのキャストは、`SimpleFloatCable` で動くことを確認した。
+- 同じインスタンスのメソッドに再入すると、`[RecursiveMethod]` がなければローカル変数が壊れる。`PostNetChanged` や `OnWritten` の中から再入しうる `RequestRefresh` と `NotifyWritten` に付けている。
+- テストはエディタ上の C# として動く。Udon 上の動作は実際に動かして確かめる。
+  - 確認済み: `protected virtual` の別インスタンス呼び出しと `object[]` から `Array` へのキャスト（`SimpleFloatCable`）。多芯（型の違う Wire が混ざる場合も）、クロス配線、Pin の数が違う相手（`SimpleMultiCable`、`Samples/Scenes/WireTest_MultiWire.unity`）。
+  - 未確認: 書き込みの通知、`RequestRefresh` と `NotifyWritten` の再入、`pinToWireMap` に名前を変えたあとの動作。
 
 ## 名前（NamingConventionProposal.md との対応）
 
 - asmdef は `frou01.UdonSharpPickupCable.Runtime`、名前空間は `frou01.UdonSharpPickupCable`。スクリプトは `Runtime/Scripts/` に置く。
+- サンプルは `Samples/`。asmdef と名前空間は `frou01.UdonSharpPickupCable.Samples` で、Runtime / Editor には分けない。スクリプトは `Samples/Scripts/`、シーンは `Samples/Scenes/` に置く。
 - 配列のフィールドは複数形にする（`terminals`、`currentPointers` など）。対応表は `<キー>To<値>Map` とし、1つのキーに対する値の数に合わせる（`pinToWireMap`、`wireToPinsMap`）。
 - 引数のない public メソッドは `SendCustomNetworkEvent` でリモートから呼べてしまうので、`_` を付ける（`_Disconnect()`、`_GetSourcePointers()`）。引数のある `Connect(Terminal)` はネットワークイベントで呼べないので付けない。SDK のバージョンで扱いが変わっているので、実装時に確認する。
 - テスト用の偽物は `Fake〜` にする。
