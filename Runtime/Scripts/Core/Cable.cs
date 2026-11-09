@@ -20,9 +20,14 @@ namespace frou01.UdonSharpPickupCable
         [NonSerialized] protected object[] sourcePointersCache;
 
         /// <summary>
-        /// 接続された結果配送された疑似ポインタ（Netの中の誰かのpseudoPointers）
+        /// 接続された結果配送された疑似ポインタ（Netの中の誰かのSourcePointer）
         /// </summary>
         [NonSerialized] protected object[] currentPointers;
+
+        /// <summary>
+        /// Wireごとに、書き込みの通知を受けるReaderのCable。
+        /// </summary>
+        [NonSerialized] protected DataList perWireListenerWireTokens;//index this.wire, WireToken
 
         /// <summary>
         /// wireがWriterかどうか。基底はfalse。
@@ -59,6 +64,54 @@ namespace frou01.UdonSharpPickupCable
         /// </summary>
         public virtual void PostNetChanged(int wire)
         {
+        }
+
+        /// <summary>
+        /// wireがReaderのとき、Writerの書き込みの通知を受けるかどうか。基底はfalse。配り直しのときに読まれる。
+        /// </summary>
+        public virtual bool WantsWrittenNotification(int wire)
+        {
+            return false;
+        }
+
+        /// <summary>
+        /// Readerへの通知。同じNetのWriterがNotifyWrittenを呼んだときに呼ばれる。基底は何もしない。
+        /// </summary>
+        public virtual void OnWritten(int wire)
+        {
+        }
+
+        /// <summary>
+        /// 継承先のWriterが、疑似ポインタに書き込んだあとに呼ぶ。通知を希望したReaderにOnWrittenを呼ぶ。
+        /// </summary>
+        [RecursiveMethod]
+        protected void NotifyWritten(int wire)
+        {
+            if (perWireListenerWireTokens == null || perWireListenerWireTokens.Count <= wire) return;
+            DataList listenerWireTokens = perWireListenerWireTokens[wire].DataList;
+            for (int idx = 0; idx < listenerWireTokens.Count; idx++)
+            {
+                DataList wireToken = listenerWireTokens[idx].DataList;
+                Cable readerCable = (Cable)wireToken[0].Reference;
+                int readerWire = wireToken[1].Int;
+                readerCable.OnWritten(readerWire);
+            }
+        }
+
+        /// <summary>
+        /// thisのwireの、書き込みの通知を受けるReaderの一覧を差し替える。他のCableから呼ばれるのでpublic。
+        /// </summary>
+        public void SetWrittenListeners(int wire, DataList listenerWireTokens)
+        {
+            if (perWireListenerWireTokens == null) perWireListenerWireTokens = new DataList();
+            if (perWireListenerWireTokens.Count <= wire)
+            {
+                for (int idx = perWireListenerWireTokens.Count; idx <= wire; idx++)
+                {
+                    perWireListenerWireTokens.Add(new DataList());//空のDataListで埋める
+                }
+            }
+            perWireListenerWireTokens[wire] = listenerWireTokens;
         }
 
         /// <summary>
@@ -131,6 +184,7 @@ namespace frou01.UdonSharpPickupCable
         /// <summary>
         /// wireのNetを探索し直して、疑似ポインタを配り直す。
         /// </summary>
+        [RecursiveMethod]
         public DataList RequestRefresh(int wire)
         {
             DataList startWireToken = new DataList();//0: Cable , 1: wire index
@@ -142,6 +196,7 @@ namespace frou01.UdonSharpPickupCable
             DataList queuedWireTokens = new DataList();
             DataList readerPointerTokens = new DataList();
             DataList sourcePointerOwnerCableTokens = new DataList();
+            DataList listenerWireTokens = new DataList();
 
             visitedWireTokens.Add(startWireToken);
 
@@ -159,13 +214,13 @@ namespace frou01.UdonSharpPickupCable
                 {
                     if (terminal.partner == null)continue;
                     Terminal partnerTerminal = terminal.partner;
-                    int[] partnerPinToWire = partnerTerminal.pinToWire;
-                    int[][] wireToPins = terminal.WireToPins;
-                    if (currentWire >= wireToPins.Length) continue;
-                    foreach (int wireCorrespondPin in wireToPins[currentWire])
+                    int[] partnerPinToWireMap = partnerTerminal.pinToWireMap;
+                    int[][] wireToPinsMap = terminal.WireToPinsMap;
+                    if (currentWire >= wireToPinsMap.Length) continue;
+                    foreach (int wireCorrespondPin in wireToPinsMap[currentWire])
                     {
-                        if (wireCorrespondPin >= partnerPinToWire.Length) continue;
-                        int partnerWire = partnerPinToWire[wireCorrespondPin];
+                        if (wireCorrespondPin >= partnerPinToWireMap.Length) continue;
+                        int partnerWire = partnerPinToWireMap[wireCorrespondPin];
                         if (partnerWire < 0) continue;
 
                         
@@ -212,6 +267,10 @@ namespace frou01.UdonSharpPickupCable
                 Cable currentCable = (Cable)currentWireToken[0].Reference;
                 int currentWire = (int)currentWireToken[1];
                 currentCable.OnNetChangedReader(currentWire, (Array)nextPointer);
+                if(currentCable.WantsWrittenNotification(currentWire))
+                {
+                    listenerWireTokens.Add(currentWireToken);
+                }
             }
             //Net全体にポインタを配る。
             for (int idx = 0; idx < visitedWireTokens.Count; idx++)
@@ -220,6 +279,15 @@ namespace frou01.UdonSharpPickupCable
                 Cable currentCable = (Cable)currentWireToken[0].Reference;
                 int currentWire = (int)currentWireToken[1];
                 currentCable.SetCurrentPointer(currentWire, nextPointer);
+            }
+
+            //SetWrittenListenersで書き込み通知を受けるWireを配る。これにより、WriterがNotifyWrittenを呼ぶと、それぞれのOnWrittenが呼ばれる。
+            for (int idx = 0; idx < sourcePointerOwnerCableTokens.Count; idx++)
+            {
+                DataList currentWireToken = (DataList)sourcePointerOwnerCableTokens[idx];
+                Cable currentCable = (Cable)currentWireToken[0].Reference;
+                int currentWire = (int)currentWireToken[1];
+                currentCable.SetWrittenListeners(currentWire, listenerWireTokens);
             }
 
             //Net確定後に処理するためのHookを呼ぶ。これにより、Net確定後の処理をCable側で行える。

@@ -1,5 +1,6 @@
 ﻿using UdonSharp;
 using UnityEngine;
+using UnityEngine.Serialization;
 using VRC.SDKBase;
 using VRC.Udon;
 
@@ -18,63 +19,72 @@ namespace frou01.UdonSharpPickupCable
         /// Pin番号は相手と向かい合う位置の番号で、相手の同じ番号のPinとつながる（物理的なピン番号とは違うことがある）。
         /// 相手とPinの数が違うときは、相手にない番号のPinは相手がいないものとして扱う。
         /// </summary>
-        public int[] pinToWire;
+        [FormerlySerializedAs("pinToWire")] public int[] pinToWireMap;
 
-        private int[][] wireToPin;
-        public int[][] WireToPins
+        private int[][] wireToPinsMap;
+        public int[][] WireToPinsMap
         {
             get
             {
-                if (wireToPin == null)
+                if (wireToPinsMap == null)
                 {
                     int maxWire = -1;
-                    foreach (int wire in pinToWire)
+                    foreach (int wire in pinToWireMap)
                     {
                         if (wire > maxWire) maxWire = wire;
                     }
-                    wireToPin = new int[maxWire + 1][];
-                    for (int i = 0; i < wireToPin.Length; i++)
+                    wireToPinsMap = new int[maxWire + 1][];
+                    for (int i = 0; i < wireToPinsMap.Length; i++)
                     {
-                        wireToPin[i] = new int[0];
+                        wireToPinsMap[i] = new int[0];
                     }
-                    for (int pin = 0; pin < pinToWire.Length; pin++)
+                    for (int pin = 0; pin < pinToWireMap.Length; pin++)
                     {
-                        int wire = pinToWire[pin];
+                        int wire = pinToWireMap[pin];
                         if (wire >= 0)
                         {
-                            int[] oldArray = wireToPin[wire];
+                            int[] oldArray = wireToPinsMap[wire];
                             int[] newArray = new int[oldArray.Length + 1];
                             oldArray.CopyTo(newArray, 0);
                             newArray[oldArray.Length] = pin;
-                            wireToPin[wire] = newArray;
+                            wireToPinsMap[wire] = newArray;
                         }
                     }
                 }
-                return wireToPin;
+                return wireToPinsMap;
             }
         } 
 
-        private int[] shouldUpdateWires;
-        public int[] ShouldUpdateWires
+        private int[] assignedWires;
+
+        /// <summary>
+        /// pinToWireに出てくるWireの番号（重複と-1を除く、昇順）。接続・切断のときに配り直すWire。
+        /// </summary>
+        public int[] AssignedWires
         {
             get
             {
-                if (shouldUpdateWires == null)
+                if (assignedWires == null)
                 {
-                    shouldUpdateWires = new int[pinToWire.Length];
-                    for (int i = 0; i < pinToWire.Length; i++)
+                    int[][] pinsOfWires = WireToPinsMap;
+                    int assignedCount = 0;
+                    for (int wire = 0; wire < pinsOfWires.Length; wire++)
                     {
-                        shouldUpdateWires[i] = pinToWire[i];
+                        if (pinsOfWires[wire].Length > 0) assignedCount++;
+                    }
+                    assignedWires = new int[assignedCount];
+                    int assignedIdx = 0;
+                    for (int wire = 0; wire < pinsOfWires.Length; wire++)
+                    {
+                        if (pinsOfWires[wire].Length > 0)
+                        {
+                            assignedWires[assignedIdx] = wire;
+                            assignedIdx++;
+                        }
                     }
                 }
-                return shouldUpdateWires;
+                return assignedWires;
             }
-#if !COMPILER_UDONSHARP && UNITY_EDITOR
-            set
-            {
-                shouldUpdateWires = value;
-            }
-#endif
         }
 
         /// <summary>
@@ -108,9 +118,9 @@ namespace frou01.UdonSharpPickupCable
             }
             this.partner = other; other.partner = this;
 
-            foreach (int wire in this.ShouldUpdateWires)
+            foreach (int wire in this.AssignedWires)
             {
-                if (wire >= 0) this.cable.RequestRefresh(wire);
+                this.cable.RequestRefresh(wire);
             }
         }
 
@@ -123,13 +133,13 @@ namespace frou01.UdonSharpPickupCable
             Terminal disconnectingTerminal = partner;
             this.partner = null;
             disconnectingTerminal.partner = null;
-            foreach (int wire in this.ShouldUpdateWires)
+            foreach (int wire in this.AssignedWires)
             {
-                if (wire >= 0) this.cable.RequestRefresh(wire);
+                this.cable.RequestRefresh(wire);
             }
-            foreach (int wire in disconnectingTerminal.ShouldUpdateWires)
+            foreach (int wire in disconnectingTerminal.AssignedWires)
             {
-                if (wire >= 0) disconnectingTerminal.cable.RequestRefresh(wire);
+                disconnectingTerminal.cable.RequestRefresh(wire);
             }
         }
     }
