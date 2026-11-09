@@ -58,7 +58,7 @@ namespace frou01.UdonSharpPickupCable
         private int[] assignedWires;
 
         /// <summary>
-        /// pinToWireに出てくるWireの番号（重複と-1を除く、昇順）。接続・切断のときに配り直すWire。
+        /// pinToWireMapに出てくるWireの番号（重複と-1を除く、昇順）。接続・切断のときに配り直すWire。
         /// </summary>
         public int[] AssignedWires
         {
