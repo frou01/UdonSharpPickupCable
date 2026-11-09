@@ -15,25 +15,14 @@ namespace frou01.UdonSharpPickupCable
         public Terminal[] terminals;
 
         /// <summary>
-        /// Wireごとの疑似ポインタ（各Wire専用の配列）。Wireの数はこの長さで表す。
+        /// Wireごとの配送元用疑似ポインタ（各Wire専用の配列）。Wireの数はこの長さで表す。
         /// </summary>
-        [NonSerialized] protected object[] pseudoPointers;
+        [NonSerialized] protected object[] sourcePointersCache;
 
         /// <summary>
-        /// Wireごとのデフォルト値。Netが変わったときに、疑似ポインタの要素をこの値で上書きする。
-        /// </summary>
-        [NonSerialized] protected object[] defaultValues;
-
-        /// <summary>
-        /// Wireごとに、今そのWireのNetが使っている疑似ポインタ（Netの中の誰かのpseudoPointers）
+        /// 接続された結果配送された疑似ポインタ（Netの中の誰かのpseudoPointers）
         /// </summary>
         [NonSerialized] protected object[] currentPointers;
-
-
-        /// <summary>
-        /// 初期化でNetを更新したWireのフラグ。Netの中の誰かのpseudoPointersを使うようにしたら、他のCableはもう更新しない。
-        /// </summary>
-        [NonSerialized] public bool[] pointerSetupFlags;
 
         /// <summary>
         /// wireがWriterかどうか。基底はfalse。
@@ -41,6 +30,15 @@ namespace frou01.UdonSharpPickupCable
         public virtual bool IsWriter(int wire)
         {
             return false;
+        }
+
+
+        /// <summary>
+        /// Reader/Writer共通 pointerの要素を、このCableのwireのデフォルト値で上書きする。
+        /// </summary>
+        protected virtual void ResetToDefault(int wire, Array pointer)
+        {
+            // TODO: 基底では何もしない。繋がる機器を規定するクラスで、pointerの要素をwireのデフォルト値で上書きする。
         }
 
         /// <summary>
@@ -55,6 +53,39 @@ namespace frou01.UdonSharpPickupCable
         /// </summary>
         public virtual void OnNetChangedReader(int wire, Array pointer)
         {
+        }
+
+        /// <summary>
+        /// 自身の配送元用ポインタを返す。キャッシュされてなければ生成する。
+        /// </summary>
+        public object[] _GetSourcePointers()
+        {
+            if(sourcePointersCache == null)
+            {
+                sourcePointersCache = CreateSourcePointers();
+            }
+
+            return sourcePointersCache;
+        }
+
+        protected virtual object[] CreateSourcePointers()
+        {
+            return new object[0];//基底では空配列を返す。繋がる機器を規定するクラスでポインタを作る。
+        }
+
+        /// <summary>
+        /// thisのwireのcurrentPointersをpointerにする。Netの全メンバーについて、他のCableから呼ばれるのでpublic。
+        /// </summary>
+        public void SetCurrentPointer(int wire, object pointer)
+        {
+            if (currentPointers == null) currentPointers = new object[wire + 1];
+            else if (currentPointers.Length <= wire)
+            {
+                object[] newCurrentPointers = new object[wire + 1];
+                currentPointers.CopyTo(newCurrentPointers, 0);
+                currentPointers = newCurrentPointers;
+            }
+            currentPointers[wire] = pointer;
         }
 
         /// <summary>
@@ -91,6 +122,8 @@ namespace frou01.UdonSharpPickupCable
                         int partnerWire = partnerPinToWire[wireCorrespondPin];
                         if (partnerWire < 0) continue;
 
+                        
+
                         DataList newWireToken = new DataList();
                         newWireToken.Add(partnerTerminal.cable);
                         newWireToken.Add(partnerWire);
@@ -103,6 +136,47 @@ namespace frou01.UdonSharpPickupCable
                 }
                 queuedWireTokens.RemoveAt(0);
             }
+
+            //配送元用ポインタを取得する
+            object sourcePointer = null;
+            for (int idx = 0; idx < visitedWireTokens.Count; idx++)
+            {
+                DataList currentWireToken = (DataList)visitedWireTokens[idx];
+                Cable currentCable = (Cable)currentWireToken[0].Reference;
+                int currentWire = (int)currentWireToken[1];
+                object[] sourcePointers = currentCable._GetSourcePointers();
+                if (sourcePointers.Length <= currentWire) continue;
+                if (sourcePointers[currentWire] == null) continue;
+                sourcePointer = sourcePointers[currentWire];
+                currentCable.ResetToDefault(currentWire, (Array)sourcePointer);
+                break;
+            }
+
+            //ポインタを配る。Writerには配った時点で書き込みフック用関数を呼ぶ。
+            for (int idx = 0; idx < visitedWireTokens.Count; idx++)
+            {
+                DataList currentWireToken = (DataList)visitedWireTokens[idx];
+                Cable currentCable = (Cable)currentWireToken[0].Reference;
+                int currentWire = (int)currentWireToken[1];
+                currentCable.SetCurrentPointer(currentWire, sourcePointer);
+                if (sourcePointer == null) continue;
+                if (currentCable.IsWriter(currentWire)){
+                    currentCable.OnNetChangedWriter(currentWire, (Array)sourcePointer);
+                }
+            }
+            //Readerには配り終えて=Writerが書き込みを行った後にフック用関数を呼ぶ。
+            if(sourcePointer != null) for (int idx = 0; idx < visitedWireTokens.Count; idx++)
+            {
+                DataList currentWireToken = (DataList)visitedWireTokens[idx];
+                Cable currentCable = (Cable)currentWireToken[0].Reference;
+                int currentWire = (int)currentWireToken[1];
+                currentCable.SetCurrentPointer(currentWire, sourcePointer);
+                if (!currentCable.IsWriter(currentWire))
+                {
+                    currentCable.OnNetChangedReader(currentWire, (Array)sourcePointer);
+                }
+            }
+
 
             return visitedWireTokens;//For Testing
         }
@@ -121,39 +195,6 @@ namespace frou01.UdonSharpPickupCable
                 }
             }
             return false;
-        }
-
-
-        /// <summary>
-        /// pointerの要素を、このCableのwireのデフォルト値で上書きする。
-        /// </summary>
-        private void ResetToDefault(int wire, Array pointer)
-        {
-            // TODO: defaultValues[wire]をpointerの各要素に書き込む
-        }
-
-        /// <summary>
-        /// NetのメンバーのうちWriterのものにOnNetChangedWriterを呼ぶ。
-        /// </summary>
-        private static void NotifyWriters(DataList netCables, DataList netWires, Array pointer)
-        {
-            // TODO: 各(cable, wire)について、cable.IsWriter(wire)ならcable.OnNetChangedWriter(wire, pointer)
-        }
-
-        /// <summary>
-        /// NetのメンバーのうちWriterでないものにOnNetChangedReaderを呼ぶ。
-        /// </summary>
-        private static void NotifyReaders(DataList netCables, DataList netWires, Array pointer)
-        {
-            // TODO: 各(cable, wire)について、cable.IsWriter(wire)でなければcable.OnNetChangedReader(wire, pointer)
-        }
-
-        /// <summary>
-        /// thisのwireのcurrentPointersをpointerにする。Netの全メンバーについて、他のCableから呼ばれるのでpublic。
-        /// </summary>
-        public void SetCurrentPointer(int wire, object pointer)
-        {
-            // TODO: currentPointers[wire] = pointer
         }
     }
 }
