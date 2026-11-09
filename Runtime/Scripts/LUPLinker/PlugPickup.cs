@@ -7,16 +7,11 @@ namespace frou01.UdonSharpPickupCable
 {
     public class PlugPickup : LUPickUpRC_RootChangeable
     {
-        [SerializeField] Cable[] wires;
+        [SerializeField] Terminal linkedTerminal;
 
-        public Cable[] GetWires()
+        public Terminal GetTerminal()
         {
-            return wires;
-        }
-        [SerializeField] int[] terminalOnWire;
-        public int[] GetTerminals()
-        {
-            return terminalOnWire;
+            return linkedTerminal;
         }
     }
 }
