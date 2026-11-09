@@ -95,6 +95,40 @@ namespace frou01.UdonSharpPickupCable
         }
 
         /// <summary>
+        /// currentPointersの内容をログに出す。Debug用。hashが同じWireは同じ配列を指している。
+        /// 引数がないので、ネットワークイベントで呼ばれないよう_を付けている。
+        /// </summary>
+        public void _DebugLogCurrentPointers()
+        {
+            if (currentPointers == null)
+            {
+                LogUtil.Log(this, nameof(_DebugLogCurrentPointers), "currentPointers is null.");
+                return;
+            }
+
+            string message = "wires=" + currentPointers.Length;
+            for (int wire = 0; wire < currentPointers.Length; wire++)
+            {
+                message += "\n  wire " + wire + ": ";
+                if (currentPointers[wire] == null)
+                {
+                    message += "null";
+                    continue;
+                }
+
+                Array pointer = (Array)currentPointers[wire];
+                message += "hash=" + pointer.GetHashCode() + " values=[";
+                for (int idx = 0; idx < pointer.Length; idx++)
+                {
+                    if (idx > 0) message += ", ";
+                    message += pointer.GetValue(idx);
+                }
+                message += "]";
+            }
+            LogUtil.Log(this, nameof(_DebugLogCurrentPointers), message);
+        }
+
+        /// <summary>
         /// wireのNetを探索し直して、疑似ポインタを配り直す。
         /// </summary>
         public DataList RequestRefresh(int wire)
