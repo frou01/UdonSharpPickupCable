@@ -125,7 +125,10 @@ namespace frou01.UdonSharpPickupCable.Tests
 
             reader.RequestRefresh(0);
 
-            Assert.That(eventLog, Is.EqualTo(new[] { "Reset:Reader:0", "Writer:Writer:0", "Reader:Reader:0" }));
+            Assert.That(eventLog, Is.EqualTo(new[]
+            {
+                "Reset:Reader:0", "Writer:Writer:0", "Reader:Reader:0", "Post:Reader:0", "Post:Writer:0",
+            }));
         }
 
         [Test]
@@ -153,6 +156,57 @@ namespace frou01.UdonSharpPickupCable.Tests
 
             Assert.That(eventLog.FindAll(entry => entry == "Writer:Writer:0").Count, Is.EqualTo(1));
             Assert.That(eventLog.FindAll(entry => entry == "Reader:Reader:0").Count, Is.EqualTo(1));
+        }
+
+        // ---- PostNetChanged ----
+
+        [Test]
+        public void PostRunsOnceForEachWriterAndReader()
+        {
+            FakeCable writer = CreateFake("Writer", WireRole.Writer);
+            FakeCable reader = CreateFake("Reader", WireRole.Reader);
+            Mate(CreateTerminal(writer, 0), CreateTerminal(reader, 0));
+
+            writer.RequestRefresh(0);
+
+            Assert.That(eventLog.FindAll(entry => entry == "Post:Writer:0").Count, Is.EqualTo(1));
+            Assert.That(eventLog.FindAll(entry => entry == "Post:Reader:0").Count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void PostSeesUpdatedCurrentPointerAndWrittenValue()
+        {
+            FakeCable writer = CreateFake("Writer", WireRole.Writer);
+            writer.valueToWrite = 100f;
+            FakeCable reader = CreateFake("Reader", WireRole.Reader);
+            Mate(CreateTerminal(writer, 0), CreateTerminal(reader, 0));
+
+            reader.RequestRefresh(0);
+
+            Assert.That(reader.currentPointersAtPost[0], Is.SameAs(writer.receivedPointers[0]));
+            Assert.That(reader.valuesAtPost[0], Is.EqualTo(100f));
+        }
+
+        [Test]
+        public void ConnectInsidePostJoinsOtherNet()
+        {
+            // リレー: Wire 0がコイル、Wire 1とWire 2が接点。コイルの通知で接点をつなぐ
+            FakeCable coilDriver = CreateFake("CoilDriver", WireRole.Writer);
+            FakeCable relay = CreateFake("Relay", WireRole.Reader, WireRole.None, WireRole.None);
+            FakeCable contactWriter = CreateFake("ContactWriter", WireRole.Writer);
+            contactWriter.valueToWrite = 100f;
+            FakeCable contactReader = CreateFake("ContactReader", WireRole.Reader);
+            Mate(CreateTerminal(coilDriver, 0), CreateTerminal(relay, 0));
+            Mate(CreateTerminal(contactWriter, 0), CreateTerminal(relay, 1));
+            Mate(CreateTerminal(relay, 2), CreateTerminal(contactReader, 0));
+            relay.terminalToConnectOnPost = CreateTerminal(relay, 1);
+            relay.connectTargetOnPost = CreateTerminal(relay, 2);
+
+            coilDriver.RequestRefresh(0);
+
+            Assert.That(ReadValue(contactReader, 0), Is.EqualTo(100f));
+            Assert.That(relay.receivedPointers[0], Is.SameAs(coilDriver.receivedPointers[0]));
+            Assert.That(relay.receivedPointers[0], Is.Not.SameAs(contactReader.receivedPointers[0]));
         }
 
         // ---- 値 ----
@@ -234,7 +288,7 @@ namespace frou01.UdonSharpPickupCable.Tests
         }
 
         [Test]
-        public void WireWithoutOwnArrayStillReceivesArrayFromNet()
+        public void WireWithoutOwnArrayGetsCurrentPointerButNoNotification()
         {
             FakeCable writer = CreateFake("Writer", WireRole.Writer);
             FakeCable fake = CreateFake("Fake", WireRole.None);
@@ -243,6 +297,7 @@ namespace frou01.UdonSharpPickupCable.Tests
             fake.RequestRefresh(0);
 
             Assert.That(fake.GetCurrentPointer(0), Is.SameAs(writer.receivedPointers[0]));
+            Assert.That(eventLog.FindAll(entry => entry.Contains(":Fake:")), Is.Empty);
         }
 
         // ---- Connect / _Disconnect ----
@@ -390,6 +445,22 @@ namespace frou01.UdonSharpPickupCable.Tests
         /// </summary>
         public readonly Dictionary<int, Array> receivedPointers = new Dictionary<int, Array>();
 
+        /// <summary>
+        /// Wireごとに、PostNetChangedの時点でのcurrentPointersの中身
+        /// </summary>
+        public readonly Dictionary<int, object> currentPointersAtPost = new Dictionary<int, object>();
+
+        /// <summary>
+        /// Wireごとに、PostNetChangedの時点で配列から読んだ値
+        /// </summary>
+        public readonly Dictionary<int, float> valuesAtPost = new Dictionary<int, float>();
+
+        /// <summary>
+        /// 設定すると、最初のPostNetChangedでconnectTargetOnPostとつなぐ（リレーの再現）。
+        /// </summary>
+        public Terminal terminalToConnectOnPost;
+        public Terminal connectTargetOnPost;
+
         public void SetWriter(int wire, bool isWriter)
         {
             wireRoles[wire] = isWriter ? WireRole.Writer : WireRole.Reader;
@@ -427,6 +498,20 @@ namespace frou01.UdonSharpPickupCable.Tests
         {
             Record("Reader", wire);
             receivedPointers[wire] = pointer;
+        }
+
+        public override void PostNetChanged(int wire)
+        {
+            Record("Post", wire);
+            currentPointersAtPost[wire] = currentPointers[wire];
+            valuesAtPost[wire] = ((float[])currentPointers[wire])[0];
+
+            if (terminalToConnectOnPost != null)
+            {
+                Terminal terminal = terminalToConnectOnPost;
+                terminalToConnectOnPost = null;
+                terminal.Connect(connectTargetOnPost);
+            }
         }
 
         protected override void ResetToDefault(int wire, Array pointer)
