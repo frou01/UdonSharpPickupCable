@@ -14,7 +14,7 @@ namespace frou01.UdonSharpPickupCable.Samples
         private const int WireIndex = 0;
 
         /// <summary>
-        /// trueならWriterとしてvalueToWriteを書き込む。実行中に変えるときはSetWriterを使う。
+        /// trueならWriterとしてvalueToWriteを書き込む。
         /// </summary>
         public bool isWriter;
 
@@ -24,7 +24,7 @@ namespace frou01.UdonSharpPickupCable.Samples
         public float defaultValue;
 
         /// <summary>
-        /// Writerのときに書き込む値。実行中に変えるときはSetValueを使う。
+        /// Writerのときに書き込む値。
         /// </summary>
         public float valueToWrite;
 

@@ -327,7 +327,7 @@ public override void OnWritten(int wire) { /* 疑似ポインタを読む */ }
 - 同じインスタンスのメソッドに再入すると、`[RecursiveMethod]` がなければローカル変数が壊れる。`PostNetChanged` や `OnWritten` の中から再入しうる `RequestRefresh` と `NotifyWritten` に付けている。
 - テストはエディタ上の C# として動く。Udon 上の動作は実際に動かして確かめる。
   - 確認済み: `protected virtual` の別インスタンス呼び出しと `object[]` から `Array` へのキャスト（`SimpleFloatCable`）。多芯（型の違う Wire が混ざる場合も）、クロス配線、Pin の数が違う相手（`SimpleMultiCable`、`Samples/Scenes/WireTest_MultiWire.unity`）。
-  - 未確認: 書き込みの通知、`RequestRefresh` と `NotifyWritten` の再入、`pinToWireMap` に名前を変えたあとの動作。
+  - 未確認: 書き込みの通知、`RequestRefresh` と `NotifyWritten` の再入。
 
 ## 名前（NamingConventionProposal.md との対応）
 
