@@ -38,7 +38,7 @@ namespace frou01.UdonSharpPickupCable
         /// </summary>
         protected virtual void ResetToDefault(int wire, Array pointer)
         {
-            // TODO: 基底では何もしない。繋がる機器を規定するクラスで、pointerの要素をwireのデフォルト値で上書きする。
+            // 基底では何もしない。繋がる機器を規定するクラスで、pointerの要素をwireのデフォルト値で上書きする。
         }
 
         /// <summary>
@@ -52,6 +52,12 @@ namespace frou01.UdonSharpPickupCable
         /// Readerへの通知。pointerへの参照を差し替える。基底は何もしない。
         /// </summary>
         public virtual void OnNetChangedReader(int wire, Array pointer)
+        {
+        }
+        /// <summary>
+        /// Reader/Writerへの共通通知。Netが確定したタイミングで呼ばれる。
+        /// </summary>
+        public virtual void PostNetChanged(int wire)
         {
         }
 
@@ -100,8 +106,14 @@ namespace frou01.UdonSharpPickupCable
 
             DataList visitedWireTokens = new DataList();
             DataList queuedWireTokens = new DataList();
+            DataList readerPointerTokens = new DataList();
+            DataList sourcePointerOwnerCableTokens = new DataList();
+
             visitedWireTokens.Add(startWireToken);
+
             queuedWireTokens.Add(startWireToken);
+            object nextPointer = null;
+
             while (queuedWireTokens.Count > 0)
             {
                 DataList currentWireToken = (DataList)queuedWireTokens[0];
@@ -124,71 +136,80 @@ namespace frou01.UdonSharpPickupCable
 
                         
 
-                        DataList newWireToken = new DataList();
-                        newWireToken.Add(partnerTerminal.cable);
-                        newWireToken.Add(partnerWire);
-                        if (!WireVisitedCheck(visitedWireTokens, newWireToken))
+                        if (!WireVisitedCheck(visitedWireTokens, partnerTerminal.cable, partnerWire))
                         {
+                            DataList newWireToken = new DataList();
+                            newWireToken.Add(partnerTerminal.cable);
+                            newWireToken.Add(partnerWire);
                             queuedWireTokens.Add(newWireToken);
                             visitedWireTokens.Add(newWireToken);
                         }
                     }
                 }
-                queuedWireTokens.RemoveAt(0);
-            }
 
-            //配送元用ポインタを取得する
-            object sourcePointer = null;
-            for (int idx = 0; idx < visitedWireTokens.Count; idx++)
-            {
-                DataList currentWireToken = (DataList)visitedWireTokens[idx];
-                Cable currentCable = (Cable)currentWireToken[0].Reference;
-                int currentWire = (int)currentWireToken[1];
+                queuedWireTokens.RemoveAt(0);
+
+                //配送元用ポインタの取得を試行、存在すればReader/Writerに振り分け。
                 object[] sourcePointers = currentCable._GetSourcePointers();
                 if (sourcePointers.Length <= currentWire) continue;
                 if (sourcePointers[currentWire] == null) continue;
-                sourcePointer = sourcePointers[currentWire];
-                currentCable.ResetToDefault(currentWire, (Array)sourcePointer);
-                break;
+
+                if (nextPointer == null)
+                {
+                    nextPointer = sourcePointers[currentWire];//最初に見つけた配送元用ポインタを保持、初期化しておく。
+                    currentCable.ResetToDefault(currentWire, (Array)nextPointer);
+                }
+                sourcePointerOwnerCableTokens.Add(currentWireToken);
+                if (currentCable.IsWriter(currentWire))
+                {
+                    currentCable.OnNetChangedWriter(currentWire, (Array)nextPointer);//nextPointerはこの時点で確定しているので、この時点で次に振るポインタに書き込みを実施してもらう
+                }
+                else
+                {
+                    readerPointerTokens.Add(currentWireToken);
+                }
+
             }
 
-            //ポインタを配る。Writerには配った時点で書き込みフック用関数を呼ぶ。
+            //事前に抽出しておいたReaderのNet初期化後読み出し用Hookを呼ぶ。
+            for (int idx = 0; idx < readerPointerTokens.Count; idx++)
+            {
+                DataList currentWireToken = (DataList)readerPointerTokens[idx];
+                Cable currentCable = (Cable)currentWireToken[0].Reference;
+                int currentWire = (int)currentWireToken[1];
+                currentCable.OnNetChangedReader(currentWire, (Array)nextPointer);
+            }
+            //Net全体にポインタを配る。
             for (int idx = 0; idx < visitedWireTokens.Count; idx++)
             {
                 DataList currentWireToken = (DataList)visitedWireTokens[idx];
                 Cable currentCable = (Cable)currentWireToken[0].Reference;
                 int currentWire = (int)currentWireToken[1];
-                currentCable.SetCurrentPointer(currentWire, sourcePointer);
-                if (sourcePointer == null) continue;
-                if (currentCable.IsWriter(currentWire)){
-                    currentCable.OnNetChangedWriter(currentWire, (Array)sourcePointer);
-                }
+                currentCable.SetCurrentPointer(currentWire, nextPointer);
             }
-            //Readerには配り終えて=Writerが書き込みを行った後にフック用関数を呼ぶ。
-            if(sourcePointer != null) for (int idx = 0; idx < visitedWireTokens.Count; idx++)
+
+            //Net確定後に処理するためのHookを呼ぶ。これにより、Net確定後の処理をCable側で行える。
+            for (int idx = 0; idx < sourcePointerOwnerCableTokens.Count; idx++)
             {
-                DataList currentWireToken = (DataList)visitedWireTokens[idx];
+                DataList currentWireToken = (DataList)sourcePointerOwnerCableTokens[idx];
                 Cable currentCable = (Cable)currentWireToken[0].Reference;
                 int currentWire = (int)currentWireToken[1];
-                currentCable.SetCurrentPointer(currentWire, sourcePointer);
-                if (!currentCable.IsWriter(currentWire))
-                {
-                    currentCable.OnNetChangedReader(currentWire, (Array)sourcePointer);
-                }
+                currentCable.PostNetChanged(currentWire);
             }
+
 
 
             return visitedWireTokens;//For Testing
         }
 
-        private bool WireVisitedCheck(DataList visitedWireTokens, DataList wireToken)
+        private bool WireVisitedCheck(DataList visitedWireTokens, Cable cable, int wire)
         {
             for(int idx = 0; idx < visitedWireTokens.Count; idx++)
             {
                 DataList currentWireToken = (DataList)visitedWireTokens[idx];
                 if (currentWireToken.Count == 2)
                 {
-                    if (currentWireToken[0].Reference == wireToken[0].Reference && currentWireToken[1].Int == wireToken[1].Int)
+                    if ((Cable)currentWireToken[0].Reference == cable && currentWireToken[1].Int == wire)
                     {
                         return true;
                     }
