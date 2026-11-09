@@ -4,14 +4,18 @@ VRChat ワールド向けの、手で抜き差しできる多芯ケーブルの�
 
 ケーブルをつなぐと、つながった機器どうしで値を共有できます。途中で分岐するケーブル、Pin の足りないソケット、クロス配線も扱えます。芯ごとにコンポーネントを作る必要はありません。
 
-> バージョン 0.0.1 の実験的なパッケージです。名前や仕様は変わることがあります。
+> アルファ版（0.0.1-alpha.1）です。名前や仕様は変わることがあります。
 
 ## 必要なもの
 
 - Unity 2022.3
 - VRChat Worlds SDK 3.7.4 以降（`com.vrchat.worlds`）
-- `com.frou01.lupick` 7.1.0 以降（プラグとソケットの抜き差し）
+- `com.frou01.lupick` 7.2.0 以降（プラグとソケットの抜き差し）
 - `com.frou01.utils` 9.1.0 以降
+
+## 導入
+
+[GitHub の Releases](https://github.com/frou01/UdonSharpPickupCable/releases) から `.unitypackage` または `.zip` をダウンロードして、プロジェクトに追加します。依存するパッケージは先に入れておいてください。
 
 ## 試してみる
 
@@ -218,12 +222,12 @@ a._Disconnect(); // スイッチを切る
 
 ## 接続できるプラグを制限する
 
-`SocketCatchCollider` の `validationPickup` と、`PlugPickup` の `getPlugTypeName` をオーバーライドします。
+`SocketCatchCollider` の `validationPickup` と、`PlugPickup` の `GetPlugTypeName` をオーバーライドします。
 
 ```csharp
 public class MyPlug : PlugPickup
 {
-    public override string getPlugTypeName()
+    public override string GetPlugTypeName()
     {
         return "Jumper";
     }
@@ -234,7 +238,7 @@ public class MySocket : SocketCatchCollider
     public override bool validationPickup(LUPickUpRC_RootChangeable pickup)
     {
         if (!base.validationPickup(pickup)) return false;
-        return pickup.GetComponent<PlugPickup>().getPlugTypeName() == "Jumper";
+        return pickup.GetComponent<PlugPickup>().GetPlugTypeName() == "Jumper";
     }
 }
 ```
@@ -258,3 +262,7 @@ Cable の `_DebugLogCurrentPointers()` を呼ぶと、Wire ごとの疑似ポイ
 ## 今後の予定
 
 - 無性コネクタの表示（接触したコネクタどうしの中点へ移動する表示器）
+
+## ライセンス
+
+MIT License。詳しくは `LICENSE` を見てください。

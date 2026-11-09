@@ -65,7 +65,7 @@ Udon では、他のクラスのメンバを辿ってアクセスするとオー
 
 Cable が持つもの:
 
-- `RequestRefresh(wire)`: 書き込みをやめたときなどに呼ぶ。その Wire の Net だけ配り直す。今はテストのために、見つけた Net（下記の visited）を返す
+- `RequestRefresh(wire)`: 書き込みをやめたときなどに呼ぶ。その Wire の Net だけ配り直す。見つけた Net（下記の visited）を返す。主にテストと確認用で、使わなくてよい
 - `_GetSourcePointers()`: 配送元用の配列を返す。なければ作る
 - `SetCurrentPointer(wire, pointer)`: `currentPointers` を更新する
 - `NotifyWritten(wire)`: 継承先の Writer が、疑似ポインタに書き込んだあとに呼ぶ（`protected`）
@@ -81,7 +81,7 @@ Cable が持つもの:
 
 ### 自動設定（BuildProcess）
 
-`Editor/BuildProcess/CableBuildProcess.cs`。シーンの処理時に、各 Cable の `terminals` を「その Cable を参照している Terminal の一覧」で**上書き**する。
+`Editor/BuildProcesses/CableBuildProcess.cs`。シーンの処理時に、各 Cable の `terminals` を「その Cable を参照している Terminal の一覧」で**上書き**する。
 
 - 利用者が設定するのは Terminal の `cable` だけでよい。
 - 順番はヒエラルキー順。非アクティブのものも含む。Terminal のない Cable は空配列になる。
@@ -354,6 +354,6 @@ public override void OnWritten(int wire) { /* 疑似ポインタを読む */ }
 
 - 最初の配り直しを誰がいつ呼ぶか。`SimpleFloatCable` は Start から `RequestRefresh` を呼び、`currentPointers` に入っていれば飛ばしている。基底で共通化するかは未定で、今は継承先に任せている
 - 無性コネクタの表示: LUPick の基底から分岐し、接触で Constraint の Source を切り替えて、常時中点へ移動する表示器にする案（未実装）
-- 接続の可否: `SocketCatchCollider.validationPickup` をオーバーライドして、`PlugPickup.getPlugTypeName` で判定する（Udon 上では未確認）
+- 接続の可否: `SocketCatchCollider.validationPickup` をオーバーライドして、`PlugPickup.GetPlugTypeName` で判定する（Udon 上では未確認）
 - 継承側のインスペクタで、Wire ごとの型と名前を表示できるか（発展的な課題）
 - Net の疑似ポインタの選び方。今は探索で最初に見つけた配列。今使っているものの持ち主が Net の中にいれば使い続けるようにすれば、Reader の参照を差し替えずに済む
