@@ -1,6 +1,6 @@
 # UdonSharpPickupCable 設計メモ
 
-2026-11-09 時点。Terminal の接続・切断、Cable の探索・疑似ポインタの割り当て・通知、書き込みの通知、プラグ / ソケット（LUPLinker）、`terminals` の自動設定まで実装済みで、テストがある。Wire 1本（`SimpleFloatCable`）、多芯とクロス配線（`SimpleMultiCable`）は Udon 上でも動作を確認した。書き込みの通知は Udon 上では未確認。機器との仲介（MachineAdapter）はこれから。
+2026-11-09 時点。Terminal の接続・切断、Cable の探索・疑似ポインタの割り当て・通知、書き込みの通知、プラグ / ソケット（LUPLinker）、`terminals` の自動設定まで実装済みで、テストがある。Wire 1本（`SimpleFloatCable`）、多芯とクロス配線（`SimpleMultiCable`）は Udon 上でも動作を確認した。書き込みの通知は Udon 上では未確認。機器は `Cable` を継承して Hook を実装すればつなげるので、専用の基底クラス（MachineAdapter）は作らない。使い方は `README.md`。
 
 ## 目的
 
@@ -92,7 +92,7 @@ Cable が持つもの:
 
 ### クラス図
 
-`MachineAdapter` は仮の名前。メソッド名も仮。
+機器は `Cable` を継承したクラスからつなぐ（図では `SimpleFloatCable`）。
 
 ```mermaid
 classDiagram
@@ -125,14 +125,14 @@ classDiagram
     +Connect(Terminal other)
     +_Disconnect()
   }
-  class MachineAdapter
+  class SimpleFloatCable
   class Machine
   class PlugPickup
   class SocketCatchCollider
   Cable "1" o-- "n" Terminal : terminals
   Terminal "1" -- "0..1" Terminal : partner
-  Cable <|-- MachineAdapter
-  MachineAdapter ..> Machine : 疑似ポインタを渡す
+  Cable <|-- SimpleFloatCable
+  SimpleFloatCable ..> Machine : 疑似ポインタを渡す
   PlugPickup --> Terminal : Connect を呼ぶ
   SocketCatchCollider --> Terminal : Connect を呼ぶ
   LUPickUpRC_RootChangeable <|-- PlugPickup
@@ -352,6 +352,8 @@ public override void OnWritten(int wire) { /* 疑似ポインタを読む */ }
 
 ## まだ決めていないこと
 
-- 最初の配り直しを誰がいつ呼ぶか。`SimpleFloatCable` は Start から `RequestRefresh` を呼び、`currentPointers` に入っていれば飛ばしている。機器との仲介でも同じでよいか
+- 最初の配り直しを誰がいつ呼ぶか。`SimpleFloatCable` は Start から `RequestRefresh` を呼び、`currentPointers` に入っていれば飛ばしている。基底で共通化するかは未定で、今は継承先に任せている
+- 無性コネクタの表示: LUPick の基底から分岐し、接触で Constraint の Source を切り替えて、常時中点へ移動する表示器にする案（未実装）
+- 接続の可否: `SocketCatchCollider.validationPickup` をオーバーライドして、`PlugPickup.getPlugTypeName` で判定する（Udon 上では未確認）
 - 継承側のインスペクタで、Wire ごとの型と名前を表示できるか（発展的な課題）
 - Net の疑似ポインタの選び方。今は探索で最初に見つけた配列。今使っているものの持ち主が Net の中にいれば使い続けるようにすれば、Reader の参照を差し替えずに済む
