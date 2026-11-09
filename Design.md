@@ -1,6 +1,6 @@
 # UdonSharpPickupCable 設計メモ
 
-2026-11-09 時点。Terminal の接続・切断と、Cable の探索・疑似ポインタの割り当て・通知まで実装済みで、テストがある（エディタ上の C# として確認。Udon 上では未確認）。機器との仲介（MachineAdapter）と、プラグ / ソケット（LUPLinker）の書き直しはこれから。
+2026-11-09 時点。Terminal の接続・切断、Cable の探索・疑似ポインタの割り当て・通知、プラグ / ソケット（LUPLinker）、`terminals` の自動設定まで実装済みで、テストがある。Wire 1本のサンプル（`SimpleFloatCable`）は Udon 上でも動作を確認した。機器との仲介（MachineAdapter）はこれから。
 
 ## 目的
 
@@ -42,7 +42,7 @@ Udon では、他のクラスのメンバを辿ってアクセスするとオー
 
 | フィールド | 内容 |
 |---|---|
-| `terminals[]` | この Cable の Terminal |
+| `terminals[]` | この Cable の Terminal。**ビルド時に自動で設定する**ので、インスペクタには出さない（`[HideInInspector]`、下記の「自動設定」） |
 | `sourcePointersCache[]` | Wire ごとの配送元用の配列。`CreateSourcePointers` の結果を保持する。機器がつながっていない Wire は null か範囲外 |
 | `currentPointers[]` | Wire ごとに、今その Wire の Net が使っている疑似ポインタ（Net の中の誰かの配送元用の配列）。Net に配列がなければ null |
 
@@ -70,7 +70,20 @@ Cable が持つもの:
 
 - 機器との仲介: 機器に疑似ポインタを受け渡す。Writer / Reader は **Wire ごと**に持つ（Terminal 1 では書き込み、Terminal 2 では読み込み、もありえる）
 
+継承先の書き方の例は `Runtime/Scripts/Sample/SimpleFloatCable.cs`（Wire 1本、`float[1]`）。
+
 **継承先の注意:** `IsWriter` を true にしても、その Wire の配列を作っていなければ通知は届かない。
+
+### 自動設定（BuildProcess）
+
+`Editor/BuildProcess/CableBuildProcess.cs`。シーンの処理時に、各 Cable の `terminals` を「その Cable を参照している Terminal の一覧」で**上書き**する。
+
+- 利用者が設定するのは Terminal の `cable` だけでよい。
+- 順番はヒエラルキー順。非アクティブのものも含む。Terminal のない Cable は空配列になる。
+- `cable` が未設定の Terminal と、参照先の Cable がそのシーンにない Terminal は、警告を出して飛ばす。
+- `callbackOrder` は -300。ほかの BuildProcess が `terminals` を使えるように早くしている。
+- U# の public フィールドなので、`SerializedObject` を使わず直接代入する。
+- シーンの列挙などは utils の `frou01.util.editor.BuildProcessUtility` を使う（`com.frou01.utils` 9.1.0 以降）。
 
 ### クラス図
 
@@ -130,7 +143,7 @@ classDiagram
   - 例: 交差するジャンパ線なら、ケーブルの両端の Terminal に `{ 0, 1, 2 }` と `{ 2, 1, 0 }` のように別の割り当てを持たせる。
 - Pin の数が相手と違うときは、相手の `pinToWire.Length` 以上の番号の Pin は、相手がいないものとして飛ばす。
 - Pin の割り当ては、ソケットを Prefab にするかコピーで揃える。
-- プラグ / ソケット（`PlugPickup` / `SocketCatchCollider`）は Terminal を持ち、外部の同期から来た接続状態で Terminal の Connect / _Disconnect を呼ぶ。Wire のことは知らなくてよい。
+- プラグ / ソケット（`PlugPickup` / `SocketCatchCollider`）は Terminal を1つ持ち（`linkedTerminal`）、外部の同期から来た接続状態で Terminal の Connect / _Disconnect を呼ぶ。Wire のことは知らなくてよい。
 
 ### スイッチ・リレー
 
@@ -238,6 +251,8 @@ foreach Terminal T in C.terminals
   - 扱っている場合: どこともつながっていない Wire、Pin 番号による対応、ほかの Wire が混ざらないこと、相手の Pin が足りない・-1、分岐、同じ Wire を複数 Pin に割り当て、直列、辿れない Net、Cable の輪、ターミネーターで同じ Cable の2本の Wire をつなぐ、スイッチ。
 - `CableNotificationTests.cs`: 疑似ポインタの割り当てと通知。Wire ごとに役割（None / Reader / Writer）を持つ `FakeCable` で、通知の順番と受け取った配列を記録する。
   - 扱っている場合: 配列の共有、ただの Cable を挟む、別の Net は別の配列、リセットと通知の順番と回数、書いた値とデフォルト値、配列を作り直さないこと、配列を持つメンバーがいない Net、配列を持たない Wire、`PostNetChanged`、`PostNetChanged` の中の Connect（リレー）、Connect / _Disconnect / つなぎ替え。
+- `SimpleFloatCableTests.cs`: サンプルの動作と、`_DebugLogCurrentPointers` の出力。
+- `CableBuildProcessTests.cs`: `terminals` の自動設定。テストランナーの無題のシーンを処理し、作業中のシーンは書き換えない。
 - `Fake〜` はテストクラスのファイルの中に書く。Editor 専用の asmdef でファイル名とクラス名が一致すると、エディタスクリプト扱いになって `AddComponent` が null を返す。
 
 ## 疑似ポインタの割り当てと値
@@ -272,7 +287,7 @@ Net が変わったら（Connect・_Disconnect・スイッチ・`RequestRefresh`
 - 同じクラスの別のインスタンスの private メソッドも呼べる（`SetCurrentPointer` で確認済み）。
 - Start の順番は決まっていない。ほかの Cable の配列を使うときは、作られている前提にしない。
 - 継承先で実装するものは abstract にせず virtual にする。基底の Cable をそのまま使えるようにするためで、U# の abstract を切り替える `#if` も要らない。
-- テストはエディタ上の C# として動く。`protected virtual` の別インスタンス呼び出し、`object[]` から `Array` へのキャストなどの Udon 上の動作は、実際に動かして確かめる。
+- テストはエディタ上の C# として動く。Udon 上の動作は実際に動かして確かめる。`protected virtual` の別インスタンス呼び出しと `object[]` から `Array` へのキャストは、`SimpleFloatCable` で動くことを確認した。
 
 ## 名前（NamingConventionProposal.md との対応）
 
@@ -291,12 +306,12 @@ Net が変わったら（Connect・_Disconnect・スイッチ・`RequestRefresh`
 
 1. どこともつながっていない線が更新されない（探索が出発点を入れていない）: 解消済み。テストあり
 2. すでにつながっている端子に別の線をつなぐと、前の相手に参照が残る（古い接続を自分の側しか外さない）: 解消済み。テストあり
-3. `SocketCatchCollider.PickupEnter` で、ソケットの線それぞれがプラグの全部の線とつながる（二重ループ）: LUPLinker の書き直しで対応する
+3. `SocketCatchCollider.PickupEnter` で、ソケットの線それぞれがプラグの全部の線とつながる（二重ループ）: LUPLinker の書き直しで解消（Terminal 1つどうしの Connect になった）
 4. `Start` で、両側のインスペクタに相手を設定していると二重に接続する: 接続を Start で行わなくなったので解消
 
 ## まだ決めていないこと
 
-- 最初の配り直しを誰がいつ呼ぶか。案: 機器との仲介の Start から自分の Wire に `RequestRefresh` を呼ぶ。`currentPointers` に入っていれば飛ばす
+- 最初の配り直しを誰がいつ呼ぶか。`SimpleFloatCable` は Start から `RequestRefresh` を呼び、`currentPointers` に入っていれば飛ばしている。機器との仲介でも同じでよいか
 - 継承側のインスペクタで、Wire ごとの型と名前を表示できるか（発展的な課題）
 - Net の疑似ポインタの選び方。今は探索で最初に見つけた配列。今使っているものの持ち主が Net の中にいれば使い続けるようにすれば、Reader の参照を差し替えずに済む
 - `ShouldUpdateWires` から重複と -1 を除くこと、名前（`should` は bool の接頭辞）
