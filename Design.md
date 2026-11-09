@@ -108,9 +108,9 @@ classDiagram
   }
   class Terminal {
     +Cable cable
-    +int[] pinToWire
-    +int[][] WireToPins
-    +int[] ShouldUpdateWires
+    +int[] pinToWireMap
+    +int[][] WireToPinsMap
+    +int[] AssignedWires
     +Terminal partner
     +Connect(Terminal other)
     +_Disconnect()
@@ -134,14 +134,14 @@ classDiagram
 | フィールド | 内容 |
 |---|---|
 | `cable` | 親の Cable |
-| `pinToWire[]` | Pin → Wire。その Pin がなければ -1。1つの Wire を複数の Pin に割り当ててよい |
-| `WireToPins` | `pinToWire` の逆引き。Wire → その Wire を割り当てた Pin 番号の配列（昇順）。長さは `pinToWire` の最大値 + 1 で、その Terminal に出てこない Wire は範囲外になる。初回のアクセスで作る（ジャグ配列はシリアライズされないため） |
-| `ShouldUpdateWires` | 接続・切断のときに `RequestRefresh` を呼ぶ Wire。初回のアクセスで `pinToWire` から作る。重複と -1 の除去、名前（`should` は bool の接頭辞）は未対応 |
+| `pinToWireMap[]` | Pin → Wire。その Pin がなければ -1。1つの Wire を複数の Pin に割り当ててよい |
+| `WireToPinsMap` | `pinToWireMap` の逆引き。Wire → その Wire を割り当てた Pin 番号の配列（昇順）。長さは `pinToWireMap` の最大値 + 1 で、その Terminal に出てこない Wire は範囲外になる。初回のアクセスで作る（ジャグ配列はシリアライズされないため） |
+| `AssignedWires` | `pinToWireMap` に出てくる Wire の番号（重複と -1 を除く、昇順）。接続・切断のときに `RequestRefresh` を呼ぶ Wire。初回のアクセスで `WireToPinsMap` から作る |
 | `partner` | 相手の Terminal（1つ）。必ず両側で対称に持つ |
 
-- 自分の Pin p は、相手の Pin p とつながる。物理的なピンの対応（無性コネクタを向かい合わせると並びが反転する、など）は、利用者が `pinToWire` を決めるときに吸収する。
+- 自分の Pin p は、相手の Pin p とつながる。物理的なピンの対応（無性コネクタを向かい合わせると並びが反転する、など）は、利用者が `pinToWireMap` を決めるときに吸収する。
   - 例: 交差するジャンパ線なら、ケーブルの両端の Terminal に `{ 0, 1, 2 }` と `{ 2, 1, 0 }` のように別の割り当てを持たせる。
-- Pin の数が相手と違うときは、相手の `pinToWire.Length` 以上の番号の Pin は、相手がいないものとして飛ばす。
+- Pin の数が相手と違うときは、相手の `pinToWireMap.Length` 以上の番号の Pin は、相手がいないものとして飛ばす。
 - Pin の割り当ては、ソケットを Prefab にするかコピーで揃える。
 - プラグ / ソケット（`PlugPickup` / `SocketCatchCollider`）は Terminal を1つ持ち（`linkedTerminal`）、外部の同期から来た接続状態で Terminal の Connect / _Disconnect を呼ぶ。Wire のことは知らなくてよい。
 
@@ -152,8 +152,8 @@ Cable の中の Wire どうしをつないだり切ったりするときは、**
 - 例: Wire 0 と Wire 1 の間のスイッチ。Pin を1つずつ持つ Terminal a と b を置く。
 
   ```csharp
-  a.pinToWire = new int[] { 0 }; // a の Pin 0 → Wire 0
-  b.pinToWire = new int[] { 1 }; // b の Pin 0 → Wire 1
+  a.pinToWireMap = new int[] { 0 }; // a の Pin 0 → Wire 0
+  b.pinToWireMap = new int[] { 1 }; // b の Pin 0 → Wire 1
   ```
 
   スイッチを入れたら `a.Connect(b)`。a の Pin 0 と b の Pin 0 が向かい合い、Wire 0 と Wire 1 が同じ Net になる。切ったら `a._Disconnect()`
@@ -170,13 +170,13 @@ Cable の中の Wire どうしをつないだり切ったりするときは、**
 
 1. this か other がすでにつながっていれば、先に _Disconnect する
 2. `this.partner = other`、`other.partner = this`
-3. this の `ShouldUpdateWires` の各 Wire（-1 は除く）で `RequestRefresh` を呼ぶ。other の側は、つながったので探索で辿り着く
+3. this の `AssignedWires` の各 Wire で `RequestRefresh` を呼ぶ。other の側は、つながったので探索で辿り着く
 
 ### this._Disconnect()
 
 1. つながっていなければ何もしない
 2. 両側の `partner` を消す
-3. this と相手のそれぞれの `ShouldUpdateWires` の各 Wire で `RequestRefresh` を呼ぶ。出発点は Terminal の `pinToWire` から決まるので、`partner` を消したあとでも集められる
+3. this と相手のそれぞれの `AssignedWires` の各 Wire で `RequestRefresh` を呼ぶ。出発点は Terminal の `pinToWireMap` から決まるので、`partner` を消したあとでも集められる
 
 ### アクティビティ図
 
@@ -226,10 +226,10 @@ flowchart TD
 ```
 foreach Terminal T in C.terminals
   U = T.partner; if U == null → 飛ばす
-  if w >= T.WireToPins.Length → 飛ばす（T に w の Pin がない）
-  foreach Pin p in T.WireToPins[w]
-    if p >= U.pinToWire.Length → 飛ばす
-    w2 = U.pinToWire[p]; if w2 < 0 → 飛ばす
+  if w >= T.WireToPinsMap.Length → 飛ばす（T に w の Pin がない）
+  foreach Pin p in T.WireToPinsMap[w]
+    if p >= U.pinToWireMap.Length → 飛ばす
+    w2 = U.pinToWireMap[p]; if w2 < 0 → 飛ばす
     (U.cable, w2) が隣
 ```
 
@@ -292,7 +292,7 @@ Net が変わったら（Connect・_Disconnect・スイッチ・`RequestRefresh`
 ## 名前（NamingConventionProposal.md との対応）
 
 - asmdef は `frou01.UdonSharpPickupCable.Runtime`、名前空間は `frou01.UdonSharpPickupCable`。スクリプトは `Runtime/Scripts/` に置く。
-- 配列のフィールドは複数形にする（`terminals`、`currentPointers` など）。対応表は `<キー>To<値>` とし、1つのキーに対する値の数に合わせる（`pinToWire`、`wireToPins`）。
+- 配列のフィールドは複数形にする（`terminals`、`currentPointers` など）。対応表は `<キー>To<値>Map` とし、1つのキーに対する値の数に合わせる（`pinToWireMap`、`wireToPinsMap`）。
 - 引数のない public メソッドは `SendCustomNetworkEvent` でリモートから呼べてしまうので、`_` を付ける（`_Disconnect()`、`_GetSourcePointers()`）。引数のある `Connect(Terminal)` はネットワークイベントで呼べないので付けない。SDK のバージョンで扱いが変わっているので、実装時に確認する。
 - テスト用の偽物は `Fake〜` にする。
 
@@ -314,4 +314,3 @@ Net が変わったら（Connect・_Disconnect・スイッチ・`RequestRefresh`
 - 最初の配り直しを誰がいつ呼ぶか。`SimpleFloatCable` は Start から `RequestRefresh` を呼び、`currentPointers` に入っていれば飛ばしている。機器との仲介でも同じでよいか
 - 継承側のインスペクタで、Wire ごとの型と名前を表示できるか（発展的な課題）
 - Net の疑似ポインタの選び方。今は探索で最初に見つけた配列。今使っているものの持ち主が Net の中にいれば使い続けるようにすれば、Reader の参照を差し替えずに済む
-- `ShouldUpdateWires` から重複と -1 を除くこと、名前（`should` は bool の接頭辞）
