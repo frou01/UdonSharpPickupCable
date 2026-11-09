@@ -6,6 +6,7 @@
   "description": "Pickupable Cable Package for UdonSharp",
   "vpmDependencies": {
     "com.frou01.lupick": ">=7.1.0",
+    "com.frou01.utils": ">=9.1.0",
     "com.vrchat.worlds": ">=3.7.4"
   },
   "author": {

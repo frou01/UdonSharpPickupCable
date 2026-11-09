@@ -12,7 +12,7 @@ namespace frou01.UdonSharpPickupCable
         /// <summary>
         /// このCableのTerminal
         /// </summary>
-        public Terminal[] terminals;
+        [HideInInspector] public Terminal[] terminals;//Auto setup by buildprocess
 
         /// <summary>
         /// Wireごとの配送元用疑似ポインタ（各Wire専用の配列）。Wireの数はこの長さで表す。

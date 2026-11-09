@@ -6,7 +6,8 @@
         "UnityEditor.TestRunner",
         "VRC.Udon",
         "UdonSharp.Runtime",
-        "frou01.UdonSharpPickupCable.Runtime"
+        "frou01.UdonSharpPickupCable.Runtime",
+        "frou01.UdonSharpPickupCable.Editor"
     ],
     "includePlatforms": [
         "Editor"
