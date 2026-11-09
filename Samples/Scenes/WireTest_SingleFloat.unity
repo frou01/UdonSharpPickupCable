@@ -26,7 +26,7 @@ RenderSettings:
   m_AmbientIntensity: 1
   m_AmbientMode: 1
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
-  m_SkyboxMaterial: {fileID: 2100000, guid: 9b0d11d6cdbaf2444bd1c8c4597f31bc, type: 2}
+  m_SkyboxMaterial: {fileID: 2100000, guid: 21221da753878694b9b9518a540dda85, type: 2}
   m_HaloStrength: 0.5
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
@@ -242,7 +242,7 @@ MonoBehaviour:
     SerializationNodes: []
   _udonSharpBackingUdonBehaviour: {fileID: 104140410}
   cable: {fileID: 1285352912}
-  pinToWire: 00000000
+  pinToWireMap: 00000000
   partner: {fileID: 0}
 --- !u!114 &104140412
 MonoBehaviour:
@@ -693,7 +693,7 @@ MonoBehaviour:
     SerializationNodes: []
   _udonSharpBackingUdonBehaviour: {fileID: 401353396}
   cable: {fileID: 152976915}
-  pinToWire: 00000000
+  pinToWireMap: 00000000
   partner: {fileID: 0}
 --- !u!1 &450887310
 GameObject:
@@ -1004,7 +1004,7 @@ MonoBehaviour:
     SerializationNodes: []
   _udonSharpBackingUdonBehaviour: {fileID: 467410468}
   cable: {fileID: 2096731771}
-  pinToWire: 00000000
+  pinToWireMap: 00000000
   partner: {fileID: 0}
 --- !u!1 &822510214
 GameObject:
@@ -1092,7 +1092,7 @@ MonoBehaviour:
     SerializationNodes: []
   _udonSharpBackingUdonBehaviour: {fileID: 822510216}
   cable: {fileID: 1285352912}
-  pinToWire: 00000000
+  pinToWireMap: 00000000
   partner: {fileID: 0}
 --- !u!114 &822510218
 MonoBehaviour:
@@ -1365,7 +1365,7 @@ MonoBehaviour:
     SerializationNodes: []
   _udonSharpBackingUdonBehaviour: {fileID: 903751530}
   cable: {fileID: 152976915}
-  pinToWire: 00000000
+  pinToWireMap: 00000000
   partner: {fileID: 0}
 --- !u!1 &1069902874
 GameObject:
@@ -1622,7 +1622,7 @@ MonoBehaviour:
     SerializationNodes: []
   _udonSharpBackingUdonBehaviour: {fileID: 1163500646}
   cable: {fileID: 152976915}
-  pinToWire: 00000000
+  pinToWireMap: 00000000
   partner: {fileID: 0}
 --- !u!1 &1285352910
 GameObject:
@@ -1959,7 +1959,7 @@ MonoBehaviour:
     SerializationNodes: []
   _udonSharpBackingUdonBehaviour: {fileID: 1317655662}
   cable: {fileID: 152976915}
-  pinToWire: 00000000
+  pinToWireMap: 00000000
   partner: {fileID: 0}
 --- !u!1 &1327739346
 GameObject:
@@ -2301,7 +2301,7 @@ MonoBehaviour:
     SerializationNodes: []
   _udonSharpBackingUdonBehaviour: {fileID: 1474622062}
   cable: {fileID: 2096731771}
-  pinToWire: 00000000
+  pinToWireMap: 00000000
   partner: {fileID: 0}
 --- !u!1 &1607651751
 GameObject:
@@ -2389,7 +2389,7 @@ MonoBehaviour:
     SerializationNodes: []
   _udonSharpBackingUdonBehaviour: {fileID: 1607651753}
   cable: {fileID: 1285352912}
-  pinToWire: 00000000
+  pinToWireMap: 00000000
   partner: {fileID: 0}
 --- !u!114 &1607651755
 MonoBehaviour:
@@ -2585,7 +2585,7 @@ MonoBehaviour:
     SerializationNodes: []
   _udonSharpBackingUdonBehaviour: {fileID: 1726744551}
   cable: {fileID: 1285352912}
-  pinToWire: 00000000
+  pinToWireMap: 00000000
   partner: {fileID: 0}
 --- !u!114 &1726744553
 MonoBehaviour:
@@ -3070,11 +3070,7 @@ MonoBehaviour:
   DrawDistance: 0
   useAssignedLayers: 0
   DynamicPrefabs: []
-  DynamicMaterials:
-  - {fileID: 2100000, guid: a567b305321fdae47bc43d7ff4ce472c, type: 2}
-  - {fileID: 2100000, guid: 93e7c80c2db20b048bf6194f33855ff9, type: 2}
-  - {fileID: 2100000, guid: 03c978fb815a6544fa388bf1739f8c46, type: 2}
-  - {fileID: 0}
+  DynamicMaterials: []
   LightMapsNear: []
   LightMapsFar: []
   LightMode: 0

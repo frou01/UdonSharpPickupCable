@@ -14,7 +14,7 @@ namespace frou01.UdonSharpPickupCable
             return linkedTerminal;
         }
 
-        public virtual string getPlugTypeName()
+        public virtual string GetPlugTypeName()
         {
             return null;
         }

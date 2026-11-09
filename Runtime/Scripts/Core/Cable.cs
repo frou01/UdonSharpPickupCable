@@ -184,6 +184,7 @@ namespace frou01.UdonSharpPickupCable
         /// <summary>
         /// wireのNetを探索し直して、疑似ポインタを配り直す。
         /// </summary>
+        /// <returns>見つけたNetの一覧。要素は[0]がCable、[1]がWire番号のDataList。主にテストと確認用で、使わなくてよい。</returns>
         [RecursiveMethod]
         public DataList RequestRefresh(int wire)
         {
@@ -301,7 +302,7 @@ namespace frou01.UdonSharpPickupCable
 
 
 
-            return visitedWireTokens;//For Testing
+            return visitedWireTokens;
         }
 
         private bool WireVisitedCheck(DataList visitedWireTokens, Cable cable, int wire)

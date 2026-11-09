@@ -1,11 +1,11 @@
 {
   "name": "com.frou01.uspc",
   "displayName": "frou01.UdonSharpPickupCable",
-  "version": "0.0.1",
+  "version": "0.0.1-alpha.1",
   "unity": "2022.3",
   "description": "Pickupable Cable Package for UdonSharp",
   "vpmDependencies": {
-    "com.frou01.lupick": ">=7.1.0",
+    "com.frou01.lupick": ">=7.2.0",
     "com.frou01.utils": ">=9.1.0",
     "com.vrchat.worlds": ">=3.7.4"
   },
