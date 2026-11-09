@@ -4,7 +4,7 @@ using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon;
 
-namespace frou01.UdonSharpPickupCable
+namespace frou01.UdonSharpPickupCable.Samples
 {
     /// <summary>
     /// Wireが1本（Wire 0、float[1]）だけのCable。継承先の書き方のサンプル。

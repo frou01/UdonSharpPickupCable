@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using frou01.UdonSharpPickupCable.Editor;
+using frou01.UdonSharpPickupCable.Samples;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;

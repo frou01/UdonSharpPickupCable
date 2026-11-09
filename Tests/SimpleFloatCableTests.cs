@@ -1,4 +1,5 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
+using frou01.UdonSharpPickupCable.Samples;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;

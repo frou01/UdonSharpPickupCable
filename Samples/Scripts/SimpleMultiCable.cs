@@ -5,7 +5,7 @@ using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon;
 
-namespace frou01.UdonSharpPickupCable
+namespace frou01.UdonSharpPickupCable.Samples
 {
     /// <summary>
     /// Wireが4本（float,float,int,reference）のCable。多芯ケーブルのサンプル。

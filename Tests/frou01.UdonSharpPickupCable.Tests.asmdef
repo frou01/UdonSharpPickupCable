@@ -7,7 +7,8 @@
         "VRC.Udon",
         "UdonSharp.Runtime",
         "frou01.UdonSharpPickupCable.Runtime",
-        "frou01.UdonSharpPickupCable.Editor"
+        "frou01.UdonSharpPickupCable.Editor",
+        "frou01.UdonSharpPickupCable.Samples"
     ],
     "includePlatforms": [
         "Editor"
